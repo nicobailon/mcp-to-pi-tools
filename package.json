@@ -1,6 +1,6 @@
 {
   "name": "mcp-to-pi-tools",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "description": "Convert MCP servers into standalone CLI tools for AI agents. Powered by mcporter.",
   "author": "Nico Bailon",
