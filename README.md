@@ -230,8 +230,8 @@ The tool times out after 60 seconds. If your MCP server is slow to start:
 MCPORTER_CALL_TIMEOUT=120000 npx mcp-to-pi-tools <package>
 ```
 
-### Pi not available
-mcp-to-pi-tools works without Pi but produces simpler 1:1 tool mappings. For intelligent grouping, install [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent).
+### No AI agent available
+mcp-to-pi-tools works without Pi or Claude but produces simpler 1:1 tool mappings. For intelligent grouping, install [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) or [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
 
 ## Contributing
 
