@@ -7,7 +7,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nicobailon/mcp2cli.git"
+    "url": "git+https://github.com/nicobailon/mcp-to-pi-tools.git"
+  },
+  "homepage": "https://github.com/nicobailon/mcp-to-pi-tools#readme",
+  "bugs": {
+    "url": "https://github.com/nicobailon/mcp-to-pi-tools/issues"
   },
   "keywords": [
     "mcp",
