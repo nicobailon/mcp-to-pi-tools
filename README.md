@@ -1,6 +1,6 @@
 # mcp-to-pi-tools
 
-Convert any MCP (Model Context Protocol) server into standalone CLI tools for AI agents.
+Convert any MCP (Model Context Protocol) server into bash-invokable scripts for AI agents.
 
 **Powered by [mcporter](https://github.com/steipete/mcporter). Optimized for [Pi coding agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent).**
 
