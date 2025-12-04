@@ -51,6 +51,9 @@ function parseArgs(args) {
     registerPaths: [],
     presets: [],
     local: false,
+    uvx: false,
+    pip: false,
+    command: null,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -90,6 +93,15 @@ function parseArgs(args) {
       }
     } else if (arg === "--local") {
       options.local = true;
+    } else if (arg === "--uvx") {
+      options.uvx = true;
+    } else if (arg === "--pip") {
+      options.pip = true;
+    } else if (arg === "--command") {
+      const val = args[++i];
+      if (val && !val.startsWith("-")) {
+        options.command = val;
+      }
     } else if (!arg.startsWith("-") && !options.package) {
       options.package = arg;
     }
@@ -108,7 +120,7 @@ Convert an MCP server into standalone CLI tools for AI agents.
 Powered by mcporter. Optimized for Pi agent.
 
 Arguments:
-  mcp-package          npm package name (e.g., "chrome-devtools-mcp" or "@org/mcp@latest")
+  mcp-package          Package name (npm or Python)
 
 Options:
   --name <name>        Output directory name (default: derived from package)
@@ -118,6 +130,11 @@ Options:
   --force, -f          Overwrite existing directory
   --help, -h           Show this help message
 
+Python/Runner:
+  --uvx                Use uvx runner (Python packages, no install needed)
+  --pip                Use pip runner (requires: pip install <package>)
+  --command <cmd>      Use explicit command (docker, custom paths, etc.)
+
 Registration:
   --register           Auto-register in config files (default: on)
   --no-register        Skip auto-registration
@@ -126,11 +143,14 @@ Registration:
   --local              Register in cwd (auto-detect CLAUDE.md/AGENTS.md)
 
 Examples:
-  mcp2cli chrome-devtools-mcp
-  mcp2cli chrome-devtools-mcp --preset claude
+  mcp2cli chrome-devtools-mcp                      # npm package
+  mcp2cli mcp-server-fetch --uvx                   # Python via uvx
+  mcp2cli mcp-server-fetch --pip                   # Python via pip
+  mcp2cli --command "docker run -i --rm mcp/fetch" fetch
   mcp2cli chrome-devtools-mcp --preset claude --local
-  mcp2cli chrome-devtools-mcp --register-path ~/.custom/AGENTS.md
   mcp2cli @org/mcp@latest --output ./tools --no-register
+
+Note: Without --uvx or --pip, tries npm first then auto-falls back to uvx.
 
 Config: ${getConfigPath()}
 
@@ -192,10 +212,21 @@ async function main() {
   }
 
   // Validate required arguments
-  if (!options.package) {
+  // With --command, package can be omitted (derive name from command)
+  if (!options.package && !options.command) {
     console.error("Error: Missing required argument: mcp-package");
     console.error("Run 'mcp2cli --help' for usage information.");
     process.exit(EXIT_INVALID_ARGS);
+  }
+
+  // Auto-derive package name from --command if not provided
+  if (!options.package && options.command) {
+    // Extract last word from command as package name
+    // "docker run -i --rm mcp/fetch" -> "mcp/fetch" -> "fetch"
+    // "uvx mcp-server-fetch" -> "mcp-server-fetch"
+    const parts = options.command.trim().split(/\s+/);
+    const lastPart = parts[parts.length - 1];
+    options.package = lastPart.includes("/") ? lastPart.split("/").pop() : lastPart;
   }
 
   const { quiet } = options;
@@ -237,9 +268,14 @@ async function main() {
 
   let discovery;
   try {
-    discovery = await discoverTools(options.package, { quiet });
+    discovery = await discoverTools(options.package, {
+      quiet,
+      uvx: options.uvx,
+      pip: options.pip,
+      command: options.command,
+    });
     if (!quiet) {
-      console.log(`      Found ${discovery.tools.length} tools`);
+      console.log(`      Found ${discovery.tools.length} tools (via ${discovery.runner})`);
     }
   } catch (error) {
     console.error(`Error: Discovery failed - ${error.message}`);

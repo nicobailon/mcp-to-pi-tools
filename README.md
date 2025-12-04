@@ -77,6 +77,25 @@ mcp-to-pi-tools chrome-devtools-mcp --register-path ~/.custom/AGENTS.md
 mcp-to-pi-tools chrome-devtools-mcp --no-register
 ```
 
+### Python MCP Servers
+
+Many MCP servers are Python packages (from PyPI). mcp-to-pi-tools supports these via:
+
+```bash
+# Explicit uvx (recommended - no install needed)
+mcp-to-pi-tools mcp-server-fetch --uvx
+
+# Pip-installed packages
+pip install mcp-server-fetch
+mcp-to-pi-tools mcp-server-fetch --pip
+
+# Custom command (docker, etc.)
+mcp-to-pi-tools --command "docker run -i --rm mcp/fetch" fetch
+
+# Auto-detection: tries npm first, then uvx
+mcp-to-pi-tools mcp-server-fetch  # auto-falls back to uvx if npm fails
+```
+
 ## Options
 
 | Option | Description |
@@ -87,6 +106,16 @@ mcp-to-pi-tools chrome-devtools-mcp --no-register
 | `--quiet, -q` | Suppress progress output |
 | `--force, -f` | Overwrite existing directory |
 | `--help, -h` | Show help message |
+
+### Python/Runner Options
+
+| Option | Description |
+|--------|-------------|
+| `--uvx` | Use uvx runner (Python packages, no install needed) |
+| `--pip` | Use pip runner (requires `pip install <package>` first) |
+| `--command <cmd>` | Use explicit command (docker, custom paths, etc.) |
+
+**Note:** Without `--uvx` or `--pip`, the tool tries npm first then auto-falls back to uvx.
 
 ### Registration Options
 
@@ -209,6 +238,16 @@ npx mcp-to-pi-tools @anthropic-ai/chrome-devtools-mcp
 # - chrome-fill.js
 # - chrome-navigate.js
 # - ...
+```
+
+### Python MCP Server (Fetch)
+
+```bash
+# Using uvx (no install needed)
+npx mcp-to-pi-tools mcp-server-fetch --uvx
+
+# Generates:
+# - server-fetch.js (wraps the fetch tool)
 ```
 
 ### Custom MCP Server
