@@ -177,27 +177,14 @@ Create `~/agent-tools/mcp2cli.settings.json` to set default registration behavio
 ## How It Works
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                         mcp2cli                             │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌──────────┐    ┌─────────────┐    ┌────────────────────┐  │
-│  │ mcporter │───>│   Schema    │───>│      pi -p         │  │
-│  │   list   │    │   Parser    │    │  (Tool Generator)  │  │
-│  └──────────┘    └─────────────┘    └────────────────────┘  │
-│        │                                    │               │
-│        v                                    v               │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │                   Output Generator                    │   │
-│  │  ┌────────┐ ┌────────┐ ┌──────────┐ ┌────────────┐   │   │
-│  │  │pkg.json│ │*.js    │ │README.md │ │install.sh  │   │   │
-│  │  └────────┘ └────────┘ └──────────┘ └────────────┘   │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                            │                                │
-└────────────────────────────┼────────────────────────────────┘
-                             v
-                  ~/agent-tools/<name>/
+MCP Package → mcporter (discover) → Pi (group & generate) → Output Files → Auto-register
 ```
+
+1. **Discover** - mcporter lists all tools and schemas from the MCP server
+2. **Group** - Pi intelligently groups related tools (or fallback 1:1 mapping)
+3. **Generate** - Pi creates wrapper scripts with proper CLI handling
+4. **Output** - Writes package to `~/agent-tools/<name>/`
+5. **Register** - Appends tool entry to agent config files
 
 ## Exit Codes
 
@@ -246,10 +233,7 @@ MCPORTER_CALL_TIMEOUT=120000 npx mcp2cli <package>
 ```
 
 ### Pi not available
-mcp2cli works without Pi but produces simpler 1:1 tool mappings. For intelligent grouping, install Pi:
-```bash
-npm install -g @anthropic-ai/pi
-```
+mcp2cli works without Pi but produces simpler 1:1 tool mappings. For intelligent grouping, install [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent).
 
 ## Contributing
 
@@ -265,6 +249,3 @@ MIT
 - **[Pi coding agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)** - Intelligent code generation
 - **[MCP](https://modelcontextprotocol.io/)** - Model Context Protocol standard
 
-## Repository
-
-https://github.com/nicobailon/mcp-to-pi-tools
