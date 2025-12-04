@@ -2,7 +2,7 @@
 
 Convert any MCP (Model Context Protocol) server into standalone CLI tools for AI agents.
 
-**Powered by [mcporter](https://github.com/steipete/mcporter). Optimized for [Pi coding agent](https://github.com/badlogic/pi-mono).**
+**Powered by [mcporter](https://github.com/steipete/mcporter). Optimized for [Pi coding agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent).**
 
 ## What It Does
 
@@ -262,7 +262,7 @@ MIT
 ## Credits
 
 - **[mcporter](https://github.com/steipete/mcporter)** - Core MCP-to-CLI bridge
-- **[Pi coding agent](https://github.com/badlogic/pi-mono)** - Intelligent code generation
+- **[Pi coding agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)** - Intelligent code generation
 - **[MCP](https://modelcontextprotocol.io/)** - Model Context Protocol standard
 
 ## Repository
