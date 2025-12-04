@@ -62,6 +62,21 @@ mcp2cli chrome-devtools-mcp --force
 
 # Quiet mode (minimal output)
 mcp2cli chrome-devtools-mcp --quiet
+
+# Register to Claude Code instead of Pi
+mcp2cli chrome-devtools-mcp --preset claude
+
+# Register to multiple agents
+mcp2cli chrome-devtools-mcp --preset claude --preset gemini
+
+# Register to local codebase
+mcp2cli chrome-devtools-mcp --local
+
+# Register to custom path
+mcp2cli chrome-devtools-mcp --register-path ~/.custom/AGENTS.md
+
+# Skip auto-registration
+mcp2cli chrome-devtools-mcp --no-register
 ```
 
 ## Options
@@ -74,6 +89,22 @@ mcp2cli chrome-devtools-mcp --quiet
 | `--quiet, -q` | Suppress progress output |
 | `--force, -f` | Overwrite existing directory |
 | `--help, -h` | Show help message |
+
+### Registration Options
+
+| Option | Description |
+|--------|-------------|
+| `--register` | Auto-register in config files (default: on) |
+| `--no-register` | Skip auto-registration |
+| `--register-path <path>` | Add registration target path (can repeat) |
+| `--preset <name>` | Use preset: `pi`, `claude`, `gemini`, `codex` (can repeat) |
+| `--local` | Register in cwd (auto-detect CLAUDE.md/AGENTS.md) |
+
+**Presets:**
+- `pi` → `~/.pi/agent/AGENTS.md` (default)
+- `claude` → `~/.claude/CLAUDE.md`
+- `gemini` → `~/.gemini/AGENTS.md`
+- `codex` → `~/.codex/AGENTS.md`
 
 ## Output Structure
 
@@ -107,7 +138,9 @@ chrome-click.js "submit-btn"
 chrome-navigate.js "https://example.com"
 ```
 
-## Pi Agent Integration
+## Agent Integration
+
+By default, mcp2cli auto-registers generated tools to `~/.pi/agent/AGENTS.md`.
 
 After generation:
 
@@ -117,15 +150,29 @@ After generation:
    ./install.sh
    ```
 
-2. Add to `~/.pi/agent/AGENTS.md`:
+2. Tools are auto-registered! If you skipped registration (`--no-register`), manually add to your agent's config file:
    ```markdown
    ### Your MCP Tools
    `~/agent-tools/<name>/README.md`
-   
+
    Brief description. X executable tools.
    ```
 
    (See generated `AGENTS-ENTRY.md` for copy-paste snippet)
+
+### Configuration File
+
+Create `~/agent-tools/mcp2cli.settings.json` to set default registration behavior:
+
+```json
+{
+  "register": true,
+  "registerPaths": [
+    "~/.pi/agent/AGENTS.md",
+    "~/.claude/CLAUDE.md"
+  ]
+}
+```
 
 ## How It Works
 

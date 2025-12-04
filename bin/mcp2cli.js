@@ -17,10 +17,11 @@ import {
   generateGitignore,
   generateReadme,
   generateAgentsEntry,
+  generateBasicReadme,
 } from "../lib/generator.js";
-import { writeOutput, outputExists, printSuccess, resolvePath } from "../lib/output.js";
-import { homedir } from "os";
-import { join } from "path";
+import { writeOutput, outputExists, printSuccess } from "../lib/output.js";
+import { loadConfig, mergeWithCli, getConfigPath } from "../lib/config.js";
+import { registerToAll, resolveAllPaths, getSuccessfulPaths } from "../lib/registration.js";
 import { execSync } from "child_process";
 
 // Exit codes per spec
@@ -45,6 +46,10 @@ function parseArgs(args) {
     quiet: false,
     force: false,
     help: false,
+    register: true,
+    registerPaths: [],
+    presets: [],
+    local: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -53,15 +58,37 @@ function parseArgs(args) {
     if (arg === "--help" || arg === "-h") {
       options.help = true;
     } else if (arg === "--name") {
-      options.name = args[++i];
+      const val = args[++i];
+      if (val && !val.startsWith("-")) {
+        options.name = val;
+      }
     } else if (arg === "--output") {
-      options.output = args[++i];
+      const val = args[++i];
+      if (val && !val.startsWith("-")) {
+        options.output = val;
+      }
     } else if (arg === "--dry-run") {
       options.dryRun = true;
     } else if (arg === "--quiet" || arg === "-q") {
       options.quiet = true;
     } else if (arg === "--force" || arg === "-f") {
       options.force = true;
+    } else if (arg === "--register") {
+      options.register = true;
+    } else if (arg === "--no-register") {
+      options.register = false;
+    } else if (arg === "--register-path") {
+      const val = args[++i];
+      if (val && !val.startsWith("-")) {
+        options.registerPaths.push(val);
+      }
+    } else if (arg === "--preset") {
+      const val = args[++i];
+      if (val && !val.startsWith("-")) {
+        options.presets.push(val);
+      }
+    } else if (arg === "--local") {
+      options.local = true;
     } else if (!arg.startsWith("-") && !options.package) {
       options.package = arg;
     }
@@ -90,10 +117,21 @@ Options:
   --force, -f          Overwrite existing directory
   --help, -h           Show this help message
 
+Registration:
+  --register           Auto-register in config files (default: on)
+  --no-register        Skip auto-registration
+  --register-path <p>  Add registration target path (can repeat)
+  --preset <name>      Use preset: pi, claude, gemini, codex (can repeat)
+  --local              Register in cwd (auto-detect CLAUDE.md/AGENTS.md)
+
 Examples:
   mcp2cli chrome-devtools-mcp
-  mcp2cli @anthropic-ai/some-mcp --name my-tools
-  mcp2cli @org/mcp@latest --output ./tools --dry-run
+  mcp2cli chrome-devtools-mcp --preset claude
+  mcp2cli chrome-devtools-mcp --preset claude --local
+  mcp2cli chrome-devtools-mcp --register-path ~/.custom/AGENTS.md
+  mcp2cli @org/mcp@latest --output ./tools --no-register
+
+Config: ${getConfigPath()}
 
 Exit Codes:
   0  Success
@@ -145,7 +183,7 @@ async function main() {
   const { quiet } = options;
 
   // Check dependencies
-  if (!quiet) console.log("\n[1/5] Checking dependencies...");
+  if (!quiet) console.log("\n[1/6] Checking dependencies...");
 
   if (!checkMcporter()) {
     console.error("Error: mcporter is not available.");
@@ -177,7 +215,7 @@ async function main() {
   }
 
   // Phase 1: Discovery
-  if (!quiet) console.log("\n[2/5] Discovering MCP tools...");
+  if (!quiet) console.log("\n[2/6] Discovering MCP tools...");
 
   let discovery;
   try {
@@ -191,7 +229,7 @@ async function main() {
   }
 
   // Phase 2: Grouping
-  if (!quiet) console.log("\n[3/5] Analyzing tool groupings...");
+  if (!quiet) console.log("\n[3/6] Analyzing tool groupings...");
 
   let groups;
   try {
@@ -211,7 +249,7 @@ async function main() {
   }
 
   // Phase 3: Generate wrappers
-  if (!quiet) console.log("\n[4/5] Generating wrapper scripts...");
+  if (!quiet) console.log("\n[4/6] Generating wrapper scripts...");
 
   const files = {};
 
@@ -268,7 +306,7 @@ async function main() {
   }
 
   // Phase 4: Write output
-  if (!quiet) console.log("\n[5/5] Writing output files...");
+  if (!quiet) console.log("\n[5/6] Writing output files...");
 
   try {
     writeOutput(outputDir, files, {
@@ -281,9 +319,26 @@ async function main() {
     process.exit(EXIT_OUTPUT_FAILED);
   }
 
+  // Phase 5: Register
+  let registeredPaths = [];
+  if (!options.dryRun) {
+    const config = loadConfig();
+    const effectiveConfig = mergeWithCli(config, options);
+
+    if (effectiveConfig.register) {
+      const paths = resolveAllPaths(effectiveConfig);
+      if (paths.length > 0) {
+        if (!quiet) console.log("\n[6/6] Registering tools...");
+        const agentsEntry = files["AGENTS-ENTRY.md"];
+        const results = registerToAll(paths, agentsEntry, { quiet });
+        registeredPaths = getSuccessfulPaths(results);
+      }
+    }
+  }
+
   // Success
   if (!options.dryRun) {
-    printSuccess(outputDir, groups.length);
+    printSuccess(outputDir, groups.length, registeredPaths);
   }
 
   process.exit(EXIT_SUCCESS);
@@ -366,60 +421,6 @@ try {
   console.error("Error:", error.message);
   process.exit(1);
 }
-`;
-}
-
-/**
- * Generate basic README without Pi
- * @param {string} name - Package name
- * @param {Array} groups - Tool groups
- * @returns {string}
- */
-function generateBasicReadme(name, groups) {
-  const toolList = groups.map((g) => `- \`${g.filename}\`: ${g.description}`).join("\n");
-
-  return `# ${name}
-
-Token-efficient CLI tools for AI agents via MCP.
-
-## Setup
-
-\`\`\`bash
-cd ~/agent-tools/${name}
-./install.sh
-\`\`\`
-
-Ensure \`~/.local/bin\` is in your PATH:
-
-\`\`\`bash
-export PATH="$HOME/.local/bin:$PATH"
-\`\`\`
-
-## How to Invoke
-
-**CORRECT:**
-\`\`\`bash
-${groups[0]?.filename || "tool.js"} --help
-\`\`\`
-
-**INCORRECT:**
-\`\`\`bash
-node ${groups[0]?.filename || "tool.js"}  # Don't use 'node' prefix
-./${groups[0]?.filename || "tool.js"}     # Don't use './' prefix
-\`\`\`
-
-## Available Tools
-
-${toolList}
-
-Run any tool with \`--help\` for usage information.
-
-## Credits
-
-These CLI tools are powered by [mcporter](https://github.com/steipete/mcporter),
-which provides the core MCP-to-CLI bridge functionality.
-
-Generated by [mcp2cli](https://github.com/nicobailon/mcp2cli) for the Pi coding agent.
 `;
 }
 
