@@ -149,10 +149,10 @@ Exit Codes:
  */
 function checkPi() {
   try {
-    execSync("pi --version", {
+    execSync("which pi", {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
-      timeout: 10000,
+      timeout: 5000,
     });
     return true;
   } catch {
