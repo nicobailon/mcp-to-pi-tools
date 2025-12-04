@@ -162,6 +162,23 @@ function checkPi() {
 }
 
 /**
+ * Check if Claude is available
+ * @returns {boolean}
+ */
+function checkClaude() {
+  try {
+    execSync("which claude", {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 5000,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Main entry point
  */
 async function main() {
@@ -193,11 +210,11 @@ async function main() {
   }
   if (!quiet) console.log("      mcporter: ✓");
 
-  const hasPi = checkPi();
-  if (!hasPi) {
-    console.warn("      Warning: Pi not available, using fallback grouping");
+  const agentType = checkPi() ? "pi" : checkClaude() ? "claude" : null;
+  if (!agentType) {
+    console.warn("      Warning: No AI agent (pi/claude) available, using fallback");
   } else if (!quiet) {
-    console.log("      pi: ✓");
+    console.log(`      ${agentType}: ✓`);
   }
 
   // Derive names
@@ -234,8 +251,8 @@ async function main() {
 
   let groups;
   try {
-    if (hasPi) {
-      groups = await groupTools(discovery.serverName, discovery.tools, { quiet });
+    if (agentType) {
+      groups = await groupTools(discovery.serverName, discovery.tools, { quiet, agentType });
     } else {
       groups = fallbackGrouping(discovery.serverName, discovery.tools);
       if (!quiet) {
@@ -262,17 +279,17 @@ async function main() {
         console.log(`      [${i + 1}/${groups.length}] ${group.filename}`);
       }
 
-      if (hasPi) {
+      if (agentType) {
         const code = await generateWrapper(
           group,
           discovery.tools,
           discovery.serverName,
           discovery.mcpCommand,
-          { quiet }
+          { quiet, agentType }
         );
         files[group.filename] = code;
       } else {
-        // Fallback: generate basic wrapper without Pi
+        // Fallback: generate basic wrapper without AI agent
         files[group.filename] = generateFallbackWrapper(
           group,
           discovery.tools,
@@ -292,9 +309,9 @@ async function main() {
     files["install.sh"] = generateInstallScript(dirName);
     files[".gitignore"] = generateGitignore();
 
-    // Generate README (uses Pi if available)
-    if (hasPi) {
-      files["README.md"] = await generateReadme(dirName, groups, discovery.tools, { quiet });
+    // Generate README (uses AI agent if available)
+    if (agentType) {
+      files["README.md"] = await generateReadme(dirName, groups, discovery.tools, { quiet, agentType });
     } else {
       files["README.md"] = generateBasicReadme(dirName, groups);
     }
