@@ -18,6 +18,7 @@ import {
   generateReadme,
   generateAgentsEntry,
   generateBasicReadme,
+  validateParameterCoverage,
 } from "../lib/generator.js";
 import { writeOutput, outputExists, printSuccess } from "../lib/output.js";
 import { loadConfig, mergeWithCli, getConfigPath } from "../lib/config.js";
@@ -300,6 +301,25 @@ async function main() {
 
     // Generate AGENTS.md entry
     files["AGENTS-ENTRY.md"] = generateAgentsEntry(dirName, groups);
+
+    // Validate parameter coverage
+    if (!quiet) console.log("      Validating parameter coverage...");
+    const allWarnings = [];
+    for (const group of groups) {
+      const groupTools = discovery.tools.filter((t) => group.mcp_tools.includes(t.name));
+      const { warnings } = validateParameterCoverage(files[group.filename], groupTools, group.filename);
+      allWarnings.push(...warnings);
+    }
+
+    if (allWarnings.length > 0) {
+      console.warn("\n      Parameter coverage warnings:");
+      for (const warning of allWarnings) {
+        console.warn(`        - ${warning}`);
+      }
+      if (process.env.MCP2CLI_STRICT_PARAMS === "true") {
+        throw new Error("Parameter coverage check failed. Set MCP2CLI_STRICT_PARAMS=false to allow.");
+      }
+    }
   } catch (error) {
     console.error(`Error: Generation failed - ${error.message}`);
     process.exit(EXIT_GENERATION_FAILED);
