@@ -1,0 +1,38 @@
+{
+  "name": "mcp2cli",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Convert MCP servers into standalone CLI tools for AI agents. Powered by mcporter.",
+  "author": "Nico Bailon",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nicobailon/mcp2cli.git"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "cli",
+    "ai-tools",
+    "agent-tools",
+    "mcporter",
+    "pi-agent"
+  ],
+  "bin": {
+    "mcp2cli": "./bin/mcp2cli.js"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "templates/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "test": "node --test",
+    "lint": "echo 'No linter configured'",
+    "check": "node --check bin/mcp2cli.js && node --check lib/*.js"
+  }
+}
