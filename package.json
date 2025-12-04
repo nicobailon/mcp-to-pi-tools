@@ -1,5 +1,5 @@
 {
-  "name": "mcp2cli",
+  "name": "mcp-to-pi-tools",
   "version": "1.0.0",
   "type": "module",
   "description": "Convert MCP servers into standalone CLI tools for AI agents. Powered by mcporter.",
@@ -23,7 +23,8 @@
     "pi-agent"
   ],
   "bin": {
-    "mcp2cli": "./bin/mcp2cli.js"
+    "mcp2cli": "./bin/mcp2cli.js",
+    "mcp-to-pi-tools": "./bin/mcp2cli.js"
   },
   "files": [
     "bin/",

@@ -1,4 +1,4 @@
-# mcp2cli
+# mcp-to-pi-tools (mcp2cli)
 
 Convert any MCP (Model Context Protocol) server into standalone CLI tools for AI agents.
 
@@ -22,10 +22,12 @@ Output: `~/agent-tools/chrome-devtools/` with ready-to-use CLI tools.
 
 ```bash
 # Use directly with npx (recommended)
+npx mcp-to-pi-tools <mcp-package>
+# or
 npx mcp2cli <mcp-package>
 
 # Or install globally
-npm install -g mcp2cli
+npm install -g mcp-to-pi-tools
 ```
 
 ### Prerequisites
