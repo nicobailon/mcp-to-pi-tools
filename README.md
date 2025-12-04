@@ -1,4 +1,4 @@
-# mcp-to-pi-tools (mcp2cli)
+# mcp-to-pi-tools
 
 Convert any MCP (Model Context Protocol) server into standalone CLI tools for AI agents.
 
@@ -7,7 +7,7 @@ Convert any MCP (Model Context Protocol) server into standalone CLI tools for AI
 ## What It Does
 
 ```
-npx mcp2cli chrome-devtools-mcp
+npx mcp-to-pi-tools chrome-devtools-mcp
 ```
 
 This command:
@@ -23,8 +23,6 @@ Output: `~/agent-tools/chrome-devtools/` with ready-to-use CLI tools.
 ```bash
 # Use directly with npx (recommended)
 npx mcp-to-pi-tools <mcp-package>
-# or
-npx mcp2cli <mcp-package>
 
 # Or install globally
 npm install -g mcp-to-pi-tools
@@ -40,43 +38,43 @@ npm install -g mcp-to-pi-tools
 
 ```bash
 # Basic usage - discovers and generates tools
-mcp2cli chrome-devtools-mcp
+mcp-to-pi-tools chrome-devtools-mcp
 
 # With scoped package
-mcp2cli @anthropic-ai/some-mcp
+mcp-to-pi-tools @anthropic-ai/some-mcp
 
 # With specific version
-mcp2cli @org/mcp@1.2.3
+mcp-to-pi-tools @org/mcp@1.2.3
 
 # Custom output name
-mcp2cli chrome-devtools-mcp --name browser-tools
+mcp-to-pi-tools chrome-devtools-mcp --name browser-tools
 
 # Custom output path
-mcp2cli chrome-devtools-mcp --output ./my-tools
+mcp-to-pi-tools chrome-devtools-mcp --output ./my-tools
 
 # Preview without writing (dry run)
-mcp2cli chrome-devtools-mcp --dry-run
+mcp-to-pi-tools chrome-devtools-mcp --dry-run
 
 # Overwrite existing directory
-mcp2cli chrome-devtools-mcp --force
+mcp-to-pi-tools chrome-devtools-mcp --force
 
 # Quiet mode (minimal output)
-mcp2cli chrome-devtools-mcp --quiet
+mcp-to-pi-tools chrome-devtools-mcp --quiet
 
 # Register to Claude Code instead of Pi
-mcp2cli chrome-devtools-mcp --preset claude
+mcp-to-pi-tools chrome-devtools-mcp --preset claude
 
 # Register to multiple agents
-mcp2cli chrome-devtools-mcp --preset claude --preset gemini
+mcp-to-pi-tools chrome-devtools-mcp --preset claude --preset gemini
 
 # Register to local codebase
-mcp2cli chrome-devtools-mcp --local
+mcp-to-pi-tools chrome-devtools-mcp --local
 
 # Register to custom path
-mcp2cli chrome-devtools-mcp --register-path ~/.custom/AGENTS.md
+mcp-to-pi-tools chrome-devtools-mcp --register-path ~/.custom/AGENTS.md
 
 # Skip auto-registration
-mcp2cli chrome-devtools-mcp --no-register
+mcp-to-pi-tools chrome-devtools-mcp --no-register
 ```
 
 ## Options
@@ -140,7 +138,7 @@ chrome-navigate.js "https://example.com"
 
 ## Agent Integration
 
-By default, mcp2cli auto-registers generated tools to `~/.pi/agent/AGENTS.md`.
+By default, mcp-to-pi-tools auto-registers generated tools to `~/.pi/agent/AGENTS.md`.
 
 After generation:
 
@@ -202,7 +200,7 @@ MCP Package → mcporter (discover) → Pi (group & generate) → Output Files �
 ### Chrome DevTools MCP
 
 ```bash
-npx mcp2cli @anthropic-ai/chrome-devtools-mcp
+npx mcp-to-pi-tools @anthropic-ai/chrome-devtools-mcp
 
 # Generates 15+ tools:
 # - chrome-snapshot.js
@@ -216,7 +214,7 @@ npx mcp2cli @anthropic-ai/chrome-devtools-mcp
 ### Custom MCP Server
 
 ```bash
-npx mcp2cli my-custom-mcp --name my-tools --output ./tools
+npx mcp-to-pi-tools my-custom-mcp --name my-tools --output ./tools
 ```
 
 ## Troubleshooting
@@ -229,11 +227,11 @@ npm install -g mcporter
 ### Discovery timeout
 The tool times out after 60 seconds. If your MCP server is slow to start:
 ```bash
-MCPORTER_CALL_TIMEOUT=120000 npx mcp2cli <package>
+MCPORTER_CALL_TIMEOUT=120000 npx mcp-to-pi-tools <package>
 ```
 
 ### Pi not available
-mcp2cli works without Pi but produces simpler 1:1 tool mappings. For intelligent grouping, install [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent).
+mcp-to-pi-tools works without Pi but produces simpler 1:1 tool mappings. For intelligent grouping, install [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent).
 
 ## Contributing
 
