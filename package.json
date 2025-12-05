@@ -23,8 +23,8 @@
     "pi-agent"
   ],
   "bin": {
-    "mcp2cli": "./bin/mcp2cli.js",
-    "mcp-to-pi-tools": "./bin/mcp2cli.js"
+    "mcp2cli": "./bin/mcp-to-pi-tools.js",
+    "mcp-to-pi-tools": "./bin/mcp-to-pi-tools.js"
   },
   "files": [
     "bin/",
@@ -38,6 +38,6 @@
   "scripts": {
     "test": "node --test",
     "lint": "echo 'No linter configured'",
-    "check": "node --check bin/mcp2cli.js && node --check lib/*.js"
+    "check": "node --check bin/mcp-to-pi-tools.js && node --check lib/*.js"
   }
 }

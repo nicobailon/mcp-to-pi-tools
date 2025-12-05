@@ -21,6 +21,7 @@ import {
 import { writeOutput, outputExists, printSuccess } from "../lib/output.js";
 import { loadConfig, mergeWithCli, getConfigPath } from "../lib/config.js";
 import { registerToAll, resolveAllPaths, getSuccessfulPaths } from "../lib/registration.js";
+import { createSymlinks, getDefaultSymlinkDir } from "../lib/symlink.js";
 import { execSync } from "child_process";
 
 // Exit codes per spec
@@ -52,6 +53,9 @@ function parseArgs(args) {
     uvx: false,
     pip: false,
     command: null,
+    symlink: true,
+    symlinkDir: null,
+    forceSymlink: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -100,6 +104,17 @@ function parseArgs(args) {
       if (val && !val.startsWith("-")) {
         options.command = val;
       }
+    } else if (arg === "--symlink") {
+      options.symlink = true;
+    } else if (arg === "--no-symlink") {
+      options.symlink = false;
+    } else if (arg === "--symlink-dir") {
+      const val = args[++i];
+      if (val && !val.startsWith("-")) {
+        options.symlinkDir = val;
+      }
+    } else if (arg === "--force-symlink") {
+      options.forceSymlink = true;
     } else if (!arg.startsWith("-") && !options.package) {
       options.package = arg;
     }
@@ -139,6 +154,12 @@ Registration:
   --register-path <p>  Add registration target path (can repeat)
   --preset <name>      Use preset: pi, claude, gemini, codex (can repeat)
   --local              Register in cwd (auto-detect CLAUDE.md/AGENTS.md)
+
+Symlinks:
+  --symlink              Auto-create symlinks in PATH (default: on)
+  --no-symlink           Skip symlink creation
+  --symlink-dir <path>   Symlink directory (default: ${getDefaultSymlinkDir()})
+  --force-symlink        Overwrite existing files with symlinks
 
 Examples:
   mcp2cli chrome-devtools-mcp                      # npm package
@@ -388,12 +409,25 @@ async function main() {
     process.exit(EXIT_OUTPUT_FAILED);
   }
 
-  // Phase 5: Register
+  // Load config for remaining phases
   let registeredPaths = [];
+  let symlinkDir = null;
+
   if (!options.dryRun) {
     const config = loadConfig();
     const effectiveConfig = mergeWithCli(config, options);
 
+    // Phase 5.5: Create symlinks
+    if (effectiveConfig.symlink) {
+      if (!quiet) console.log("\n[5.5/6] Creating symlinks...");
+      symlinkDir = effectiveConfig.symlinkDir || getDefaultSymlinkDir();
+      createSymlinks(outputDir, files, symlinkDir, {
+        force: effectiveConfig.forceSymlink,
+        quiet,
+      });
+    }
+
+    // Phase 6: Register
     if (effectiveConfig.register) {
       const paths = resolveAllPaths(effectiveConfig);
       if (paths.length > 0) {
@@ -407,7 +441,7 @@ async function main() {
 
   // Success
   if (!options.dryRun) {
-    printSuccess(outputDir, groups.length, registeredPaths);
+    printSuccess(outputDir, groups.length, registeredPaths, symlinkDir);
   }
 
   process.exit(EXIT_SUCCESS);

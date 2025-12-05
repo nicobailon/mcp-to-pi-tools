@@ -5,23 +5,24 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import { deriveServerName, deriveDirName, buildMcpCommand } from "../lib/discovery.js";
+import { EXAMPLE_PACKAGES } from "./fixtures.js";
 
 describe("deriveServerName", () => {
   it("should handle simple package names", () => {
-    assert.strictEqual(deriveServerName("chrome-devtools-mcp"), "chrome-devtools");
+    assert.strictEqual(deriveServerName(EXAMPLE_PACKAGES.simple), "chrome-devtools");
   });
 
   it("should handle scoped packages", () => {
-    assert.strictEqual(deriveServerName("@org/chrome-devtools-mcp"), "chrome-devtools");
+    assert.strictEqual(deriveServerName(EXAMPLE_PACKAGES.scoped), "context7");
   });
 
   it("should handle version suffixes", () => {
-    assert.strictEqual(deriveServerName("chrome-devtools-mcp@latest"), "chrome-devtools");
-    assert.strictEqual(deriveServerName("@org/chrome-devtools-mcp@1.0.0"), "chrome-devtools");
+    assert.strictEqual(deriveServerName(EXAMPLE_PACKAGES.simpleWithVersion), "chrome-devtools");
+    assert.strictEqual(deriveServerName(EXAMPLE_PACKAGES.scopedWithVersion), "context7");
   });
 
   it("should handle mcp- prefix", () => {
-    assert.strictEqual(deriveServerName("mcp-github"), "github");
+    assert.strictEqual(deriveServerName(EXAMPLE_PACKAGES.python), "server-time");
   });
 
   it("should handle packages without -mcp suffix", () => {
@@ -31,28 +32,38 @@ describe("deriveServerName", () => {
 
 describe("deriveDirName", () => {
   it("should derive directory name from package", () => {
-    assert.strictEqual(deriveDirName("chrome-devtools-mcp"), "chrome-devtools");
-    assert.strictEqual(deriveDirName("@org/my-mcp-server-mcp"), "my-mcp-server");
+    assert.strictEqual(deriveDirName(EXAMPLE_PACKAGES.simple), "chrome-devtools");
+    assert.strictEqual(deriveDirName(EXAMPLE_PACKAGES.scoped), "context7");
+  });
+
+  it("should handle python packages", () => {
+    assert.strictEqual(deriveDirName(EXAMPLE_PACKAGES.python), "server-time");
   });
 });
 
 describe("buildMcpCommand", () => {
   it("should build npx command for simple package", () => {
-    assert.strictEqual(buildMcpCommand("chrome-devtools-mcp"), "npx -y chrome-devtools-mcp@latest");
+    assert.strictEqual(
+      buildMcpCommand(EXAMPLE_PACKAGES.simple),
+      "npx -y chrome-devtools-mcp@latest"
+    );
   });
 
   it("should build npx command for scoped package", () => {
     assert.strictEqual(
-      buildMcpCommand("@org/chrome-devtools-mcp"),
-      "npx -y @org/chrome-devtools-mcp@latest"
+      buildMcpCommand(EXAMPLE_PACKAGES.scoped),
+      "npx -y @upstash/context7-mcp@latest"
     );
   });
 
   it("should preserve explicit version", () => {
-    assert.strictEqual(buildMcpCommand("my-mcp@1.2.3"), "npx -y my-mcp@1.2.3");
     assert.strictEqual(
-      buildMcpCommand("@org/my-mcp@2.0.0"),
-      "npx -y @org/my-mcp@2.0.0"
+      buildMcpCommand(EXAMPLE_PACKAGES.simpleWithVersion),
+      "npx -y chrome-devtools-mcp@latest"
+    );
+    assert.strictEqual(
+      buildMcpCommand(EXAMPLE_PACKAGES.scopedWithVersion),
+      "npx -y @upstash/context7-mcp@1.0.0"
     );
   });
 });

@@ -27,20 +27,21 @@ npx mcp-to-pi-tools chrome-devtools-mcp
 
 ## The Solution
 
-Generate simple, self-documenting CLI tools that mirror the MCP schema:
+Generate simple, self-documenting CLI tools with short symlinks agents can reliably invoke:
 
 ```bash
-# Before: Complex mcporter command agents fumble with
-npx mcporter call --stdio npx --stdio-arg -y ... take_snapshot
+# Before: 100+ char mcporter commands agents struggle to construct
+npx mcporter call --stdio "npx -y chrome-devtools-mcp" chrome-devtools.take_snapshot format:"png"
 
-# After: Intuitive script agents execute reliably
-~/agent-tools/chrome-devtools/chrome-snapshot.js --help
+# After: Short symlinks agents execute reliably
+chrome-snapshot --format png
 ```
 
-| mcporter CLI | mcp-to-pi-tools |
-|--------------|-----------------|
-| 100+ chars, agents fumble & loop | ~50 chars, reliable execution |
-| Abstract entry point | One tool per script, schema-aligned |
+| Approach | Command Length | Agent Reliability |
+|----------|---------------|-------------------|
+| Raw mcporter | 100+ chars | Agents fumble syntax, retry loops |
+| Full path | ~55 chars | Reliable but verbose |
+| **Symlink** | **~25 chars** | **Minimal, reliable** |
 
 ## Why This Works for Pi (and other agents)
 
@@ -64,11 +65,16 @@ This tool automates that pattern for MCP servers:
 
 ```bash
 # Generate tools (Node 18+ required)
-npx mcp-to-pi-tools @anthropic-ai/chrome-devtools-mcp
+npx mcp-to-pi-tools chrome-devtools-mcp
 
-# Use immediately
+# Use immediately via symlink
+chrome-snapshot --help
+
+# Or via full path
 ~/agent-tools/chrome-devtools/chrome-snapshot.js --help
 ```
+
+> **Note:** Ensure `~/agent-tools/bin` is in your PATH for symlinks to work.
 
 ## Usage
 
@@ -103,10 +109,13 @@ npx mcp-to-pi-tools --command "docker run -i mcp/fetch" fetch
 
 ### Options
 ```
---dry-run        Preview without writing
---force, -f      Overwrite existing directory
---quiet, -q      Minimal output
---no-register    Skip auto-registration
+--dry-run          Preview without writing
+--force, -f        Overwrite existing directory
+--quiet, -q        Minimal output
+--no-register      Skip auto-registration
+--no-symlink       Skip symlink creation
+--symlink-dir <p>  Custom symlink directory (default: ~/agent-tools/bin)
+--force-symlink    Overwrite existing files with symlinks
 ```
 
 ### Registration (Auto-config for agents)
@@ -131,6 +140,10 @@ npx mcp-to-pi-tools chrome-devtools-mcp --register-path ~/.config/AGENTS.md
 ├── AGENTS-ENTRY.md     # Copy-paste config snippet
 ├── <prefix>-tool1.js   # Executable wrapper
 └── <prefix>-tool2.js
+
+~/agent-tools/bin/          # Symlinks for PATH access
+├── <prefix>-tool1 → ../<name>/<prefix>-tool1.js
+└── <prefix>-tool2 → ../<name>/<prefix>-tool2.js
 ```
 
 Each wrapper:
@@ -138,6 +151,7 @@ Each wrapper:
 - Supports `--help` with examples
 - Outputs errors to stderr
 - Uses ES modules
+- Symlinked without `.js` extension for cleaner invocation
 
 ## Configuration
 
@@ -146,7 +160,9 @@ Create `~/agent-tools/mcp2cli.settings.json` for defaults:
 ```json
 {
   "register": true,
-  "registerPaths": ["~/.pi/agent/AGENTS.md", "~/.claude/CLAUDE.md"]
+  "registerPaths": ["~/.pi/agent/AGENTS.md", "~/.claude/CLAUDE.md"],
+  "symlink": true,
+  "symlinkDir": "~/agent-tools/bin"
 }
 ```
 

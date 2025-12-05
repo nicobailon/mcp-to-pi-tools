@@ -10,10 +10,11 @@ import {
   extractFirstParagraph,
   fetchPackageDescription,
 } from "../lib/runner.js";
+import { EXAMPLE_PACKAGES } from "./fixtures.js";
 
 describe("toModuleName", () => {
   it("should convert hyphens to underscores", () => {
-    assert.strictEqual(toModuleName("mcp-server-fetch"), "mcp_server_fetch");
+    assert.strictEqual(toModuleName(EXAMPLE_PACKAGES.python), "mcp_server_time");
   });
 
   it("should handle single hyphen", () => {
@@ -47,29 +48,29 @@ describe("detectRunner", () => {
 describe("buildMcpCommand", () => {
   it("should build npx command by default", () => {
     assert.strictEqual(
-      buildMcpCommand("chrome-devtools-mcp"),
+      buildMcpCommand(EXAMPLE_PACKAGES.simple),
       "npx -y chrome-devtools-mcp@latest"
     );
   });
 
   it("should preserve version if specified", () => {
     assert.strictEqual(
-      buildMcpCommand("chrome-devtools-mcp@1.0.0"),
-      "npx -y chrome-devtools-mcp@1.0.0"
+      buildMcpCommand(EXAMPLE_PACKAGES.scopedWithVersion),
+      "npx -y @upstash/context7-mcp@1.0.0"
     );
   });
 
   it("should build uvx command when uvx option is set", () => {
     assert.strictEqual(
-      buildMcpCommand("mcp-server-fetch", { uvx: true }),
-      "uvx mcp-server-fetch"
+      buildMcpCommand(EXAMPLE_PACKAGES.python, { uvx: true }),
+      "uvx mcp-server-time"
     );
   });
 
   it("should build pip command with module name conversion", () => {
     assert.strictEqual(
-      buildMcpCommand("mcp-server-fetch", { pip: true }),
-      "python -m mcp_server_fetch"
+      buildMcpCommand(EXAMPLE_PACKAGES.python, { pip: true }),
+      "python -m mcp_server_time"
     );
   });
 
@@ -82,8 +83,8 @@ describe("buildMcpCommand", () => {
 
   it("should use runner option override", () => {
     assert.strictEqual(
-      buildMcpCommand("mcp-server-fetch", { runner: "uvx" }),
-      "uvx mcp-server-fetch"
+      buildMcpCommand(EXAMPLE_PACKAGES.python, { runner: "uvx" }),
+      "uvx mcp-server-time"
     );
   });
 
@@ -127,15 +128,15 @@ describe("RUNNERS", () => {
 
 describe("stripVersion", () => {
   it("should strip version from simple package", () => {
-    assert.strictEqual(stripVersion("mcp-server-fetch@1.0.0"), "mcp-server-fetch");
+    assert.strictEqual(stripVersion(EXAMPLE_PACKAGES.simpleWithVersion), "chrome-devtools-mcp");
   });
 
   it("should keep scoped package without version", () => {
-    assert.strictEqual(stripVersion("@org/my-pkg"), "@org/my-pkg");
+    assert.strictEqual(stripVersion(EXAMPLE_PACKAGES.scoped), "@upstash/context7-mcp");
   });
 
   it("should strip version from scoped package", () => {
-    assert.strictEqual(stripVersion("@org/my-pkg@1.0.0"), "@org/my-pkg");
+    assert.strictEqual(stripVersion(EXAMPLE_PACKAGES.scopedWithVersion), "@upstash/context7-mcp");
   });
 
   it("should handle plain package name", () => {
@@ -143,7 +144,7 @@ describe("stripVersion", () => {
   });
 
   it("should handle @latest suffix", () => {
-    assert.strictEqual(stripVersion("chrome-devtools-mcp@latest"), "chrome-devtools-mcp");
+    assert.strictEqual(stripVersion(EXAMPLE_PACKAGES.simpleWithVersion), "chrome-devtools-mcp");
   });
 });
 
