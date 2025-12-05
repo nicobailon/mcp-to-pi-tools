@@ -6,7 +6,6 @@ import { describe, it } from "node:test";
 import assert from "node:assert";
 import {
   generatePackageJson,
-  generateInstallScript,
   generateGitignore,
   generateAgentsEntry,
 } from "../lib/generator.js";
@@ -22,18 +21,6 @@ describe("generatePackageJson", () => {
     assert.ok(parsed.description.includes("browser automation"));
     assert.ok(parsed.description.includes("AI agents"));
     assert.deepStrictEqual(parsed.dependencies, {});
-  });
-});
-
-describe("generateInstallScript", () => {
-  it("should generate install script with correct name", () => {
-    const result = generateInstallScript("my-tools");
-
-    assert.ok(result.startsWith("#!/bin/bash"));
-    assert.ok(result.includes("my-tools"));
-    assert.ok(result.includes("$HOME/.local/bin"));
-    assert.ok(result.includes("chmod +x"));
-    assert.ok(result.includes("ln -sf"));
   });
 });
 

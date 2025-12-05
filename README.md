@@ -4,7 +4,6 @@
 
 ```bash
 npx mcp-to-pi-tools chrome-devtools-mcp
-cd ~/agent-tools/chrome-devtools && ./install.sh
 ```
 
 Done. Your agent now has 15+ browser automation tools registered and ready to use.
@@ -18,30 +17,16 @@ You can! [mcporter](https://github.com/steipete/mcporter) is excellent for ad-ho
 # mcporter direct call (80+ characters)
 npx mcporter call --stdio npx --stdio-arg -y --stdio-arg @anthropic-ai/chrome-devtools-mcp@latest take_snapshot
 
-# mcp-to-pi-tools (after one-time setup)
-chrome-snapshot.js
+# mcp-to-pi-tools (one-time setup)
+~/agent-tools/chrome-devtools/chrome-snapshot.js
 ```
 
-**Friction points when using mcporter alone:**
-
-| Issue | Impact on AI Agents |
-|-------|---------------------|
-| No tool-specific `--help` | `take_screenshot --help` shows generic mcporter help, not the tool's parameters |
-| Discovery overhead | ~1s per call to spin up the MCP server; repeated every session |
-| JSON Schema parsing required | Agent must understand raw schemas to know argument types and enums |
-| Not in agent knowledge base | Agent has no idea these tools exist without explicit instruction |
-
-**What mcp-to-pi-tools adds:**
-
-| With mcporter alone | With mcp-to-pi-tools |
-|---------------------|----------------------|
-| 80+ char commands | 15-25 char commands |
-| Re-discover tools each session | Tools installed once, always available |
-| Parse JSON schemas for args | Human-readable `--help` with examples |
-| Tools not in agent's config | Auto-registered in AGENTS.md/CLAUDE.md |
-| Agent asks "should I use mcporter?" | Agent proactively picks the right tool |
-
-**The result:** After one-time setup, your agent knows about the tools, can read their docs, and uses them without prompting. In testing with Chrome DevTools MCP, these details make agents significantly more proactive.
+| mcporter alone | mcp-to-pi-tools |
+|----------------|-----------------|
+| 100+ char commands | ~50 char commands |
+| Re-discover tools each session | One-time setup, always available |
+| No `--help` per tool | Every tool has `--help` with examples |
+| Tools not in agent config | Auto-registered in AGENTS.md/CLAUDE.md |
 
 *Could you chat with an agent for a few minutes to set this up manually? Sure. But this makes it consistent, fast, and zero mental energy.*
 
@@ -50,7 +35,7 @@ chrome-snapshot.js
 1. **Discovers** all tools from the MCP server via mcporter
 2. **Groups** related tools intelligently (using Pi/Claude, or 1:1 fallback)
 3. **Generates** executable wrappers with `--help` and proper arg parsing
-4. **Installs** to `~/agent-tools/<name>/` with symlinks to PATH
+4. **Outputs** to `~/agent-tools/<name>/`
 5. **Registers** tools in your agent's config file (AGENTS.md, CLAUDE.md, etc.)
 
 ## Installation
@@ -173,7 +158,6 @@ mcp-to-pi-tools mcp-server-fetch  # auto-falls back to uvx if npm fails
 ```
 ~/agent-tools/<name>/
 ├── package.json       # Dependencies (none required at runtime)
-├── install.sh         # Symlinks tools to ~/.local/bin
 ├── README.md          # Agent-optimized documentation
 ├── .gitignore
 ├── AGENTS-ENTRY.md    # Copy-paste snippet for AGENTS.md
@@ -194,25 +178,18 @@ Each generated wrapper script:
 
 Example generated tool:
 ```bash
-# After running install.sh
-chrome-snapshot.js
-chrome-click.js "submit-btn"
-chrome-navigate.js "https://example.com"
+~/agent-tools/chrome-devtools/chrome-snapshot.js
+~/agent-tools/chrome-devtools/chrome-click.js "submit-btn"
+~/agent-tools/chrome-devtools/chrome-navigate.js "https://example.com"
 ```
 
 ## Agent Integration
 
 By default, mcp-to-pi-tools auto-registers generated tools to `~/.pi/agent/AGENTS.md`.
 
-After generation:
+Tools are ready to use immediately via full path (e.g., `~/agent-tools/<name>/tool.js`).
 
-1. Run the install script:
-   ```bash
-   cd ~/agent-tools/<name>
-   ./install.sh
-   ```
-
-2. Tools are auto-registered! If you skipped registration (`--no-register`), manually add to your agent's config file:
+If you skipped registration (`--no-register`), manually add to your agent's config file:
    ```markdown
    ### Your MCP Tools
    `~/agent-tools/<name>/README.md`

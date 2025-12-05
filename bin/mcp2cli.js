@@ -13,7 +13,6 @@ import { groupTools, fallbackGrouping } from "../lib/grouping.js";
 import {
   generateWrapper,
   generatePackageJson,
-  generateInstallScript,
   generateGitignore,
   generateReadme,
   generateAgentsEntry,
@@ -342,7 +341,6 @@ async function main() {
       dirName,
       `${discovery.serverName} automation`
     );
-    files["install.sh"] = generateInstallScript(dirName);
     files[".gitignore"] = generateGitignore();
 
     // Generate README (uses AI agent if available)
