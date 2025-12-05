@@ -13,7 +13,6 @@ import { groupTools, fallbackGrouping } from "../lib/grouping.js";
 import {
   generateWrapper,
   generatePackageJson,
-  generateGitignore,
   generateReadme,
   generateAgentsEntry,
   generateBasicReadme,
@@ -341,7 +340,6 @@ async function main() {
       dirName,
       `${discovery.serverName} automation`
     );
-    files[".gitignore"] = generateGitignore();
 
     // Generate README (uses AI agent if available)
     if (agentType) {

@@ -6,7 +6,6 @@ import { describe, it } from "node:test";
 import assert from "node:assert";
 import {
   generatePackageJson,
-  generateGitignore,
   generateAgentsEntry,
 } from "../lib/generator.js";
 
@@ -21,13 +20,6 @@ describe("generatePackageJson", () => {
     assert.ok(parsed.description.includes("browser automation"));
     assert.ok(parsed.description.includes("AI agents"));
     assert.deepStrictEqual(parsed.dependencies, {});
-  });
-});
-
-describe("generateGitignore", () => {
-  it("should include node_modules", () => {
-    const result = generateGitignore();
-    assert.ok(result.includes("node_modules/"));
   });
 });
 
