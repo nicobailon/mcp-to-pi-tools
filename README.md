@@ -1,6 +1,6 @@
 # mcp-to-pi-tools
 
-**One command turns any MCP server into persistent, agent-ready CLI tools.**
+**One command turns any MCP server into persistent, agent-ready CLI tools—built for [Pi](https://github.com/badlogic/pi-mono)'s tool conventions.**
 
 ```bash
 npx mcp-to-pi-tools chrome-devtools-mcp
@@ -34,6 +34,24 @@ npx mcporter call --stdio npx --stdio-arg -y ... take_snapshot
 | 100+ chars, agents fumble & loop | ~50 chars, reliable execution |
 | Abstract entry point | One tool per script, schema-aligned |
 
+## Why This Works for Pi (and other agents)
+
+**Pi doesn't support MCP directly.** Instead, it relies on simple CLI tools that agents invoke via Bash. The pattern is:
+
+1. Create a CLI tool (any language, any executable)
+2. Write a README describing usage
+3. Reference it in `AGENTS.md` (global or project-specific)
+
+This tool automates that pattern for MCP servers:
+
+1. **Discovers** MCP tools via mcporter
+2. **Generates** each as a standalone executable + README
+3. **Registers** them in `AGENTS.md` format
+
+**Result:** MCP tools become first-class Pi-native tools that agents invoke directly.
+
+*For the rationale behind this approach, see [What if you don't need MCP?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/) by Mario Zechner.*
+
 ## Quick Start
 
 ```bash
@@ -43,13 +61,6 @@ npx mcp-to-pi-tools @anthropic-ai/chrome-devtools-mcp
 # Use immediately
 ~/agent-tools/chrome-devtools/chrome-snapshot.js --help
 ```
-
-## How It Works
-
-1. **Discovers** all tools from any MCP server via mcporter
-2. **Generates** executable wrappers with `--help` and argument parsing
-3. **Registers** them in your agent's config (Pi, Claude, Gemini, etc.)
-4. **Outputs** to `~/agent-tools/<name>/`
 
 ## Usage
 
@@ -150,5 +161,5 @@ MIT
 ## Credits
 
 - **[mcporter](https://github.com/steipete/mcporter)** - Core MCP bridge
-- **[Pi](https://github.com/badlogic/pi-mono)** / **Claude Code** - Intelligent grouping
+- **[Pi](https://github.com/badlogic/pi-mono)** / **Claude Code** - Intelligent grouping via headless mode
 - **[MCP](https://modelcontextprotocol.io)** - The protocol
