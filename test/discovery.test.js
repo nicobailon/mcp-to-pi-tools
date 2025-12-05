@@ -12,12 +12,12 @@ describe("deriveServerName", () => {
   });
 
   it("should handle scoped packages", () => {
-    assert.strictEqual(deriveServerName("@anthropic-ai/chrome-devtools-mcp"), "chrome-devtools");
+    assert.strictEqual(deriveServerName("@org/chrome-devtools-mcp"), "chrome-devtools");
   });
 
   it("should handle version suffixes", () => {
     assert.strictEqual(deriveServerName("chrome-devtools-mcp@latest"), "chrome-devtools");
-    assert.strictEqual(deriveServerName("@anthropic-ai/chrome-devtools-mcp@1.0.0"), "chrome-devtools");
+    assert.strictEqual(deriveServerName("@org/chrome-devtools-mcp@1.0.0"), "chrome-devtools");
   });
 
   it("should handle mcp- prefix", () => {
@@ -43,8 +43,8 @@ describe("buildMcpCommand", () => {
 
   it("should build npx command for scoped package", () => {
     assert.strictEqual(
-      buildMcpCommand("@anthropic-ai/chrome-devtools-mcp"),
-      "npx -y @anthropic-ai/chrome-devtools-mcp@latest"
+      buildMcpCommand("@org/chrome-devtools-mcp"),
+      "npx -y @org/chrome-devtools-mcp@latest"
     );
   });
 

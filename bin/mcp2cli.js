@@ -353,7 +353,7 @@ async function main() {
     }
 
     // Generate AGENTS.md entry
-    files["AGENTS-ENTRY.md"] = generateAgentsEntry(dirName, groups);
+    files["AGENTS-ENTRY.md"] = generateAgentsEntry(dirName, groups, discovery.description);
 
     // Validate parameter coverage
     if (!quiet) console.log("      Validating parameter coverage...");

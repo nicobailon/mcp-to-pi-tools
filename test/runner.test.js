@@ -6,6 +6,9 @@ import {
   toModuleName,
   getRunnerNames,
   RUNNERS,
+  stripVersion,
+  extractFirstParagraph,
+  fetchPackageDescription,
 } from "../lib/runner.js";
 
 describe("toModuleName", () => {
@@ -119,5 +122,86 @@ describe("RUNNERS", () => {
     assert.deepStrictEqual(RUNNERS.pip.args, ["-m"]);
     assert.strictEqual(RUNNERS.pip.suffix, "");
     assert.ok(typeof RUNNERS.pip.transform === "function");
+  });
+});
+
+describe("stripVersion", () => {
+  it("should strip version from simple package", () => {
+    assert.strictEqual(stripVersion("mcp-server-fetch@1.0.0"), "mcp-server-fetch");
+  });
+
+  it("should keep scoped package without version", () => {
+    assert.strictEqual(stripVersion("@org/my-pkg"), "@org/my-pkg");
+  });
+
+  it("should strip version from scoped package", () => {
+    assert.strictEqual(stripVersion("@org/my-pkg@1.0.0"), "@org/my-pkg");
+  });
+
+  it("should handle plain package name", () => {
+    assert.strictEqual(stripVersion("fetch"), "fetch");
+  });
+
+  it("should handle @latest suffix", () => {
+    assert.strictEqual(stripVersion("chrome-devtools-mcp@latest"), "chrome-devtools-mcp");
+  });
+});
+
+describe("extractFirstParagraph", () => {
+  it("should extract first paragraph after title", () => {
+    const readme = `# My Package
+
+This is the first paragraph of the README.
+
+## Features
+- Feature 1`;
+    assert.strictEqual(extractFirstParagraph(readme), "This is the first paragraph of the README.");
+  });
+
+  it("should skip badges", () => {
+    const readme = `# My Package
+
+[![Build Status](https://img.shields.io/badge/build-passing.svg)](https://example.com)
+![Coverage](https://img.shields.io/badge/coverage-100.svg)
+
+This is the actual first paragraph.`;
+    assert.strictEqual(extractFirstParagraph(readme), "This is the actual first paragraph.");
+  });
+
+  it("should handle multi-line paragraphs", () => {
+    const readme = `# Title
+
+This is a paragraph that
+spans multiple lines
+in the source.
+
+## Next section`;
+    assert.strictEqual(extractFirstParagraph(readme), "This is a paragraph that spans multiple lines in the source.");
+  });
+
+  it("should return undefined for empty readme", () => {
+    assert.strictEqual(extractFirstParagraph(""), undefined);
+    assert.strictEqual(extractFirstParagraph(null), undefined);
+  });
+
+  it("should return undefined for readme with only headings", () => {
+    const readme = `# Title
+
+## Section 1
+
+## Section 2`;
+    assert.strictEqual(extractFirstParagraph(readme), undefined);
+  });
+});
+
+describe("fetchPackageDescription", () => {
+  it("should return undefined for custom runner", async () => {
+    const result = await fetchPackageDescription("anything", "custom");
+    assert.strictEqual(result, undefined);
+  });
+
+  it("should return undefined for unknown runner", async () => {
+    const result = await fetchPackageDescription("anything", "unknown");
+    assert.strictEqual(result, undefined);
   });
 });

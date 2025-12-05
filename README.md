@@ -1,22 +1,57 @@
 # mcp-to-pi-tools
 
-Convert any MCP (Model Context Protocol) server into bash-invokable scripts for AI agents.
+**One command to turn any MCP server into persistent, agent-ready CLI tools.**
 
-**Powered by [mcporter](https://github.com/steipete/mcporter). Optimized for [Pi coding agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent).**
+```bash
+npx mcp-to-pi-tools chrome-devtools-mcp
+cd ~/agent-tools/chrome-devtools && ./install.sh
+```
+
+Done. Your agent now has 15+ browser automation tools registered and ready to use.
+
+## Why Not Just Use mcporter Directly?
+
+You can! [mcporter](https://github.com/steipete/mcporter) is excellent for ad-hoc MCP calls and has its own `generate-cli` command. But for AI agent workflows, there's friction:
+
+**The command complexity problem:**
+```bash
+# mcporter direct call (80+ characters)
+npx mcporter call --stdio npx --stdio-arg -y --stdio-arg @anthropic-ai/chrome-devtools-mcp@latest take_snapshot
+
+# mcp-to-pi-tools (after one-time setup)
+chrome-snapshot.js
+```
+
+**Friction points when using mcporter alone:**
+
+| Issue | Impact on AI Agents |
+|-------|---------------------|
+| No tool-specific `--help` | `take_screenshot --help` shows generic mcporter help, not the tool's parameters |
+| Discovery overhead | ~1s per call to spin up the MCP server; repeated every session |
+| JSON Schema parsing required | Agent must understand raw schemas to know argument types and enums |
+| Not in agent knowledge base | Agent has no idea these tools exist without explicit instruction |
+
+**What mcp-to-pi-tools adds:**
+
+| With mcporter alone | With mcp-to-pi-tools |
+|---------------------|----------------------|
+| 80+ char commands | 15-25 char commands |
+| Re-discover tools each session | Tools installed once, always available |
+| Parse JSON schemas for args | Human-readable `--help` with examples |
+| Tools not in agent's config | Auto-registered in AGENTS.md/CLAUDE.md |
+| Agent asks "should I use mcporter?" | Agent proactively picks the right tool |
+
+**The result:** After one-time setup, your agent knows about the tools, can read their docs, and uses them without prompting. In testing with Chrome DevTools MCP, these details make agents significantly more proactive.
+
+*Could you chat with an agent for a few minutes to set this up manually? Sure. But this makes it consistent, fast, and zero mental energy.*
 
 ## What It Does
 
-```
-npx mcp-to-pi-tools chrome-devtools-mcp
-```
-
-This command:
 1. **Discovers** all tools from the MCP server via mcporter
-2. **Groups** tools intelligently using Pi (or fallback 1:1 mapping)
-3. **Generates** executable wrapper scripts with proper arg parsing
-4. **Creates** a complete installable directory with README and install script
-
-Output: `~/agent-tools/chrome-devtools/` with ready-to-use CLI tools.
+2. **Groups** related tools intelligently (using Pi/Claude, or 1:1 fallback)
+3. **Generates** executable wrappers with `--help` and proper arg parsing
+4. **Installs** to `~/agent-tools/<name>/` with symlinks to PATH
+5. **Registers** tools in your agent's config file (AGENTS.md, CLAUDE.md, etc.)
 
 ## Installation
 
@@ -200,18 +235,6 @@ Create `~/agent-tools/mcp2cli.settings.json` to set default registration behavio
   ]
 }
 ```
-
-## How It Works
-
-```
-MCP Package → mcporter (discover) → Pi (group & generate) → Output Files → Auto-register
-```
-
-1. **Discover** - mcporter lists all tools and schemas from the MCP server
-2. **Group** - Pi intelligently groups related tools (or fallback 1:1 mapping)
-3. **Generate** - Pi creates wrapper scripts with proper CLI handling
-4. **Output** - Writes package to `~/agent-tools/<name>/`
-5. **Register** - Appends tool entry to agent config files
 
 ## Exit Codes
 

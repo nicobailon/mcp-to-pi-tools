@@ -45,7 +45,7 @@ describe("generateGitignore", () => {
 });
 
 describe("generateAgentsEntry", () => {
-  it("should generate markdown table", () => {
+  it("should generate tool entry with description", () => {
     const groups = [
       { filename: "tool-a.js", description: "Does A" },
       { filename: "tool-b.js", description: "Does B" },
@@ -53,9 +53,19 @@ describe("generateAgentsEntry", () => {
 
     const result = generateAgentsEntry("my-tools", groups);
 
-    assert.ok(result.includes("| Tool | Purpose |"));
-    assert.ok(result.includes("| `tool-a.js` | Does A |"));
-    assert.ok(result.includes("| `tool-b.js` | Does B |"));
+    assert.ok(result.includes("### My Tools Tools"));
+    assert.ok(result.includes("**Tools:** `tool-a.js`, `tool-b.js`"));
     assert.ok(result.includes("~/agent-tools/my-tools/README.md"));
+    assert.ok(result.includes("Tools for My Tools operations."));
+  });
+
+  it("should use package description when provided", () => {
+    const groups = [{ filename: "fetch.js", description: "Fetch URL" }];
+    const packageDescription = "A powerful web fetching tool.";
+
+    const result = generateAgentsEntry("fetch", groups, packageDescription);
+
+    assert.ok(result.includes("A powerful web fetching tool."));
+    assert.ok(!result.includes("Tools for Fetch operations."));
   });
 });
