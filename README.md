@@ -6,8 +6,6 @@
 npx mcp-to-pi-tools chrome-devtools-mcp
 ```
 
-Done. Your agent now has 15+ browser automation tools registered and ready to use.
-
 ## Why Not Just Use mcporter Directly?
 
 You can! [mcporter](https://github.com/steipete/mcporter) is excellent for ad-hoc MCP calls and has its own `generate-cli` command. But for AI agent workflows, there's friction:
