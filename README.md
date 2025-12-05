@@ -1,6 +1,14 @@
+<p>
+  <img src="mcp-to-pi-tools.jpg" alt="mcp-to-pi-tools" width="1100">
+</p>
+
 # mcp-to-pi-tools
 
 **One command turns any MCP server into persistent, agent-ready CLI tools—built for [Pi](https://github.com/badlogic/pi-mono)'s tool conventions.**
+
+[![npm version](https://img.shields.io/npm/v/mcp-to-pi-tools?style=for-the-badge)](https://www.npmjs.com/package/mcp-to-pi-tools)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-blue?style=for-the-badge)]()
 
 ```bash
 npx mcp-to-pi-tools chrome-devtools-mcp
