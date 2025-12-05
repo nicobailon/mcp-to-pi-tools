@@ -56,6 +56,7 @@ function parseArgs(args) {
     symlink: true,
     symlinkDir: null,
     forceSymlink: false,
+    agent: null,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -115,6 +116,11 @@ function parseArgs(args) {
       }
     } else if (arg === "--force-symlink") {
       options.forceSymlink = true;
+    } else if (arg === "--agent") {
+      const val = args[++i];
+      if (val && !val.startsWith("-")) {
+        options.agent = val;
+      }
     } else if (!arg.startsWith("-") && !options.package) {
       options.package = arg;
     }
@@ -147,6 +153,11 @@ Python/Runner:
   --uvx                Use uvx runner (Python packages, no install needed)
   --pip                Use pip runner (requires: pip install <package>)
   --command <cmd>      Use explicit command (docker, custom paths, etc.)
+
+AI Agent:
+  --agent <name>       Force AI agent for code generation (pi, claude, codex)
+                       Default: auto-detect (pi -> claude -> codex)
+                       Note: --preset codex implies --agent codex
 
 Registration:
   --register           Auto-register in config files (default: on)
@@ -218,6 +229,23 @@ function checkClaude() {
 }
 
 /**
+ * Check if Codex is available
+ * @returns {boolean}
+ */
+function checkCodex() {
+  try {
+    execSync("which codex", {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 5000,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Main entry point
  */
 async function main() {
@@ -260,11 +288,35 @@ async function main() {
   }
   if (!quiet) console.log("      mcporter: ✓");
 
-  const agentType = checkPi() ? "pi" : checkClaude() ? "claude" : null;
-  if (!agentType) {
-    console.warn("      Warning: No AI agent (pi/claude) available, using fallback");
-  } else if (!quiet) {
-    console.log(`      ${agentType}: ✓`);
+  let agentType;
+  const validAgents = ["pi", "claude", "codex"];
+  const agentCheckers = { pi: checkPi, claude: checkClaude, codex: checkCodex };
+
+  // Determine requested agent: explicit --agent flag, or infer from --preset
+  let requestedAgent = options.agent;
+  if (!requestedAgent && options.presets.includes("codex")) {
+    requestedAgent = "codex";
+  }
+
+  if (requestedAgent) {
+    if (!validAgents.includes(requestedAgent)) {
+      console.error(`Error: Unknown agent '${requestedAgent}'. Valid: ${validAgents.join(", ")}`);
+      process.exit(EXIT_INVALID_ARGS);
+    }
+    if (!agentCheckers[requestedAgent]()) {
+      console.error(`Error: Requested agent '${requestedAgent}' is not available`);
+      process.exit(EXIT_ERROR);
+    }
+    agentType = requestedAgent;
+    const source = options.agent ? "forced" : "from --preset codex";
+    if (!quiet) console.log(`      ${agentType}: ✓ (${source})`);
+  } else {
+    agentType = checkPi() ? "pi" : checkClaude() ? "claude" : checkCodex() ? "codex" : null;
+    if (!agentType) {
+      console.warn("      Warning: No AI agent (pi/claude/codex) available, using fallback");
+    } else if (!quiet) {
+      console.log(`      ${agentType}: ✓`);
+    }
   }
 
   // Derive names

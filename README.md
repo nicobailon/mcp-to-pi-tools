@@ -116,6 +116,8 @@ npx mcp-to-pi-tools --command "docker run -i mcp/fetch" fetch
 --no-symlink       Skip symlink creation
 --symlink-dir <p>  Custom symlink directory (default: ~/agent-tools/bin)
 --force-symlink    Overwrite existing files with symlinks
+--agent <name>     Force AI agent (pi, claude, codex). Auto-detects by default.
+                   Note: --preset codex implies --agent codex
 ```
 
 ### Registration (Auto-config for agents)
