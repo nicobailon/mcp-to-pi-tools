@@ -13,6 +13,8 @@ import {
   registerEntry,
   resolveAllPaths,
   getSuccessfulPaths,
+  extractHeading,
+  findSectionByHeading,
 } from "../lib/registration.js";
 
 describe("resolvePath", () => {
@@ -37,7 +39,7 @@ describe("detectLocalFile", () => {
   let testDir;
 
   beforeEach(() => {
-    testDir = join(tmpdir(), `mcp2cli-test-${Date.now()}`);
+    testDir = join(tmpdir(), `mcp2cli-local-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     mkdirSync(testDir, { recursive: true });
   });
 
@@ -74,7 +76,7 @@ describe("registerEntry", () => {
   let testDir;
 
   beforeEach(() => {
-    testDir = join(tmpdir(), `mcp2cli-test-${Date.now()}`);
+    testDir = join(tmpdir(), `mcp2cli-reg-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     mkdirSync(testDir, { recursive: true });
   });
 
@@ -84,7 +86,7 @@ describe("registerEntry", () => {
 
   it("should create new file if it does not exist", () => {
     const targetPath = join(testDir, "NEW.md");
-    const result = registerEntry(targetPath, "# New Content");
+    const result = registerEntry(targetPath, "# New Content", "test-pkg");
     assert.strictEqual(result.success, true);
     assert.ok(existsSync(targetPath));
     const content = readFileSync(targetPath, "utf-8");
@@ -94,7 +96,7 @@ describe("registerEntry", () => {
   it("should append to existing file", () => {
     const targetPath = join(testDir, "EXISTING.md");
     writeFileSync(targetPath, "# Existing\n\nSome content");
-    const result = registerEntry(targetPath, "# Appended");
+    const result = registerEntry(targetPath, "# Appended", "test-pkg");
     assert.strictEqual(result.success, true);
     const content = readFileSync(targetPath, "utf-8");
     assert.ok(content.includes("# Existing"));
@@ -103,13 +105,13 @@ describe("registerEntry", () => {
 
   it("should create parent directories if needed", () => {
     const targetPath = join(testDir, "nested", "deep", "FILE.md");
-    const result = registerEntry(targetPath, "# Nested");
+    const result = registerEntry(targetPath, "# Nested", "test-pkg");
     assert.strictEqual(result.success, true);
     assert.ok(existsSync(targetPath));
   });
 
   it("should return success false on write error", () => {
-    const result = registerEntry("/nonexistent/readonly/path/FILE.md", "# Content");
+    const result = registerEntry("/nonexistent/readonly/path/FILE.md", "# Content", "test-pkg");
     assert.strictEqual(result.success, false);
     assert.ok(result.error);
   });
@@ -159,5 +161,109 @@ describe("getSuccessfulPaths", () => {
   it("should return empty array for empty input", () => {
     const paths = getSuccessfulPaths([]);
     assert.deepStrictEqual(paths, []);
+  });
+});
+
+describe("extractHeading", () => {
+  it("should extract ### heading from content", () => {
+    const content = "### My Tools\n\nSome description";
+    const result = extractHeading(content);
+    assert.strictEqual(result, "### My Tools");
+  });
+
+  it("should return null if no heading found", () => {
+    const content = "No heading here";
+    const result = extractHeading(content);
+    assert.strictEqual(result, null);
+  });
+
+  it("should find heading in middle of content", () => {
+    const content = "Preamble\n\n### Tools Section\n\nContent";
+    const result = extractHeading(content);
+    assert.strictEqual(result, "### Tools Section");
+  });
+});
+
+describe("findSectionByHeading", () => {
+  it("should find section from heading to next heading", () => {
+    const content = "# File\n\n### Section A\nContent A\n\n### Section B\nContent B";
+    const result = findSectionByHeading(content, "### Section A");
+    assert.ok(result);
+    assert.ok(result.content.includes("### Section A"));
+    assert.ok(result.content.includes("Content A"));
+    assert.ok(!result.content.includes("### Section B"));
+  });
+
+  it("should find section from heading to EOF", () => {
+    const content = "# File\n\n### Only Section\nContent here";
+    const result = findSectionByHeading(content, "### Only Section");
+    assert.ok(result);
+    assert.ok(result.content.includes("### Only Section"));
+    assert.ok(result.content.includes("Content here"));
+  });
+
+  it("should return null if heading not found", () => {
+    const content = "# File\n\n### Other Section\nContent";
+    const result = findSectionByHeading(content, "### Missing Section");
+    assert.strictEqual(result, null);
+  });
+});
+
+describe("registerEntry idempotent behavior", () => {
+  let testDir;
+
+  beforeEach(() => {
+    testDir = join(tmpdir(), `mcp2cli-idem-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    mkdirSync(testDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it("should return unchanged if same content exists", () => {
+    const targetPath = join(testDir, "TEST.md");
+    const entry = "### Test Tools\n\nSome content";
+
+    registerEntry(targetPath, entry, "test-tools");
+    const result = registerEntry(targetPath, entry, "test-tools");
+
+    assert.strictEqual(result.action, "unchanged");
+  });
+
+  it("should return updated if content differs", () => {
+    const targetPath = join(testDir, "TEST.md");
+    const entry1 = "### Test Tools\n\nOriginal content";
+    const entry2 = "### Test Tools\n\nUpdated content";
+
+    registerEntry(targetPath, entry1, "test-tools");
+    const result = registerEntry(targetPath, entry2, "test-tools");
+
+    assert.strictEqual(result.action, "updated");
+    const content = readFileSync(targetPath, "utf-8");
+    assert.ok(content.includes("Updated content"));
+    assert.ok(!content.includes("Original content"));
+  });
+
+  it("should return created for new entry", () => {
+    const targetPath = join(testDir, "TEST.md");
+    const entry = "### Test Tools\n\nSome content";
+
+    const result = registerEntry(targetPath, entry, "test-tools");
+
+    assert.strictEqual(result.action, "created");
+  });
+
+  it("should not create duplicates on re-run", () => {
+    const targetPath = join(testDir, "TEST.md");
+    const entry = "### Test Tools\n\nContent";
+
+    registerEntry(targetPath, entry, "test-tools");
+    registerEntry(targetPath, entry, "test-tools");
+    registerEntry(targetPath, entry, "test-tools");
+
+    const content = readFileSync(targetPath, "utf-8");
+    const matches = content.match(/### Test Tools/g);
+    assert.strictEqual(matches.length, 1);
   });
 });

@@ -463,6 +463,7 @@ async function main() {
       dryRun: options.dryRun,
       force: options.force,
       quiet,
+      packageName: dirName,
     });
   } catch (error) {
     console.error(`Error: Failed to write output - ${error.message}`);
@@ -502,7 +503,7 @@ async function main() {
       if (paths.length > 0) {
         if (!quiet) console.log("\n[6/6] Registering tools...");
         const agentsEntry = files["AGENTS-ENTRY.md"];
-        const results = registerToAll(paths, agentsEntry, { quiet });
+        const results = registerToAll(paths, agentsEntry, dirName, { quiet });
         registeredPaths = getSuccessfulPaths(results);
       }
     }

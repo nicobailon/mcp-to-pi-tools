@@ -110,7 +110,7 @@ npx mcp-to-pi-tools --command "docker run -i mcp/fetch" fetch
 ### Options
 ```
 --dry-run          Preview without writing
---force, -f        Overwrite existing directory
+--force, -f        Update existing tools (preserves user files)
 --quiet, -q        Minimal output
 --no-register      Skip auto-registration
 --no-symlink       Skip symlink creation
@@ -119,6 +119,19 @@ npx mcp-to-pi-tools --command "docker run -i mcp/fetch" fetch
 --agent <name>     Force AI agent (pi, claude, codex). Auto-detects by default.
                    Note: --preset codex implies --agent codex
 ```
+
+### Updating Tools
+
+Re-run the same command with `--force` to update existing tools:
+
+```bash
+npx mcp-to-pi-tools chrome-devtools-mcp --force
+```
+
+**Smart updates:**
+- Generated files are replaced, user-added files preserved
+- Registration entries are updated in-place (no duplicates)
+- Symlinks updated if targets changed
 
 ### Registration (Auto-config for agents)
 ```bash
