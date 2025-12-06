@@ -22,6 +22,7 @@ import { writeOutput, outputExists, printSuccess } from "../lib/output.js";
 import { loadConfig, mergeWithCli, getConfigPath } from "../lib/config.js";
 import { registerToAll, resolveAllPaths, getSuccessfulPaths } from "../lib/registration.js";
 import { createSymlinks, getDefaultSymlinkDir } from "../lib/symlink.js";
+import { ensurePathConfigured } from "../lib/shell-config.js";
 import { execSync } from "child_process";
 
 // Exit codes per spec
@@ -57,6 +58,7 @@ function parseArgs(args) {
     symlinkDir: null,
     forceSymlink: false,
     agent: null,
+    shellConfig: true,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -121,6 +123,10 @@ function parseArgs(args) {
       if (val && !val.startsWith("-")) {
         options.agent = val;
       }
+    } else if (arg === "--shell-config") {
+      options.shellConfig = true;
+    } else if (arg === "--no-shell-config") {
+      options.shellConfig = false;
     } else if (!arg.startsWith("-") && !options.package) {
       options.package = arg;
     }
@@ -171,6 +177,8 @@ Symlinks:
   --no-symlink           Skip symlink creation
   --symlink-dir <path>   Symlink directory (default: ${getDefaultSymlinkDir()})
   --force-symlink        Overwrite existing files with symlinks
+  --shell-config         Auto-add PATH to shell config (default: on)
+  --no-shell-config      Skip shell config modification
 
 Examples:
   mcp2cli chrome-devtools-mcp                      # npm package
@@ -464,6 +472,7 @@ async function main() {
   // Load config for remaining phases
   let registeredPaths = [];
   let symlinkDir = null;
+  let shellConfigResult = null;
 
   if (!options.dryRun) {
     const config = loadConfig();
@@ -477,6 +486,14 @@ async function main() {
         force: effectiveConfig.forceSymlink,
         quiet,
       });
+
+      // Auto-configure shell PATH if symlinks were created
+      if (options.shellConfig) {
+        shellConfigResult = ensurePathConfigured();
+        if (shellConfigResult.success && shellConfigResult.action === "added" && !quiet) {
+          console.log(`      Added PATH to ${shellConfigResult.configPath}`);
+        }
+      }
     }
 
     // Phase 6: Register
@@ -493,7 +510,7 @@ async function main() {
 
   // Success
   if (!options.dryRun) {
-    printSuccess(outputDir, groups.length, registeredPaths, symlinkDir);
+    printSuccess(outputDir, groups.length, registeredPaths, symlinkDir, shellConfigResult);
   }
 
   process.exit(EXIT_SUCCESS);
