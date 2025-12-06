@@ -24,6 +24,7 @@ import { registerToAll, resolveAllPaths, getSuccessfulPaths } from "../lib/regis
 import { createSymlinks, getDefaultSymlinkDir } from "../lib/symlink.js";
 import { ensurePathConfigured } from "../lib/shell-config.js";
 import { execSync } from "child_process";
+import { createInterface } from "readline";
 
 // Exit codes per spec
 const EXIT_SUCCESS = 0;
@@ -50,6 +51,7 @@ function parseArgs(args) {
     register: true,
     registerPaths: [],
     presets: [],
+    allPresets: false,
     local: false,
     uvx: false,
     pip: false,
@@ -59,7 +61,34 @@ function parseArgs(args) {
     forceSymlink: false,
     agent: null,
     shellConfig: true,
+    subcommand: null,
+    subcommandArg: null,
+    yes: false,
+    fix: false,
   };
+
+  if (args.length > 0 && !args[0].startsWith("-")) {
+    if (args[0] === "list") {
+      options.subcommand = "list";
+      args = args.slice(1);
+    } else if (args[0] === "remove") {
+      options.subcommand = "remove";
+      if (args[1] && !args[1].startsWith("-")) {
+        options.subcommandArg = args[1];
+        args = args.slice(2);
+      } else {
+        args = args.slice(1);
+      }
+    } else if (args[0] === "refresh") {
+      options.subcommand = "refresh";
+      if (args[1] && !args[1].startsWith("-")) {
+        options.subcommandArg = args[1];
+        args = args.slice(2);
+      } else {
+        args = args.slice(1);
+      }
+    }
+  }
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -98,6 +127,8 @@ function parseArgs(args) {
       }
     } else if (arg === "--local") {
       options.local = true;
+    } else if (arg === "--all-presets") {
+      options.allPresets = true;
     } else if (arg === "--uvx") {
       options.uvx = true;
     } else if (arg === "--pip") {
@@ -127,6 +158,10 @@ function parseArgs(args) {
       options.shellConfig = true;
     } else if (arg === "--no-shell-config") {
       options.shellConfig = false;
+    } else if (arg === "--yes" || arg === "-y") {
+      options.yes = true;
+    } else if (arg === "--fix") {
+      options.fix = true;
     } else if (!arg.startsWith("-") && !options.package) {
       options.package = arg;
     }
@@ -140,9 +175,19 @@ function parseArgs(args) {
  */
 function showHelp() {
   console.log(`Usage: mcp2cli <mcp-package> [options]
+       mcp2cli list [--fix]
+       mcp2cli remove <name> [options]
+       mcp2cli refresh [name] [options]
 
 Convert an MCP server into standalone CLI tools for AI agents.
 Powered by mcporter. Optimized for Pi agent.
+
+Commands:
+  list                 List all installed tools
+  list --fix           List and fix missing symlinks/registrations
+  remove <name>        Remove an installed tool (prompts for confirmation)
+  refresh              Refresh symlinks and registrations for all tools
+  refresh <name>       Refresh symlinks and registration for a specific tool
 
 Arguments:
   mcp-package          Package name (npm or Python)
@@ -153,6 +198,7 @@ Options:
   --dry-run            Preview generated files without writing
   --quiet, -q          Suppress progress output
   --force, -f          Overwrite existing directory
+  --yes, -y            Skip confirmation prompts (for remove)
   --help, -h           Show this help message
 
 Python/Runner:
@@ -165,11 +211,12 @@ AI Agent:
                        Default: auto-detect (pi -> claude -> codex)
                        Note: --preset codex implies --agent codex
 
-Registration:
+Registration (default: first existing preset in pi -> claude -> codex -> gemini):
   --register           Auto-register in config files (default: on)
   --no-register        Skip auto-registration
   --register-path <p>  Add registration target path (can repeat)
   --preset <name>      Use preset: pi, claude, gemini, codex (can repeat)
+  --all-presets        Register to ALL existing preset files
   --local              Register in cwd (auto-detect CLAUDE.md/AGENTS.md)
 
 Symlinks:
@@ -253,6 +300,136 @@ function checkCodex() {
   }
 }
 
+async function promptConfirmation(message) {
+  if (!process.stdin.isTTY) {
+    console.error("Error: Cannot prompt for confirmation in non-interactive mode. Use -y to skip.");
+    return false;
+  }
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(`${message} [y/N] `, (answer) => {
+      rl.close();
+      resolve(answer.toLowerCase() === "y" || answer.toLowerCase() === "yes");
+    });
+  });
+}
+
+async function handleRemove(options) {
+  const { removeTool } = await import("../lib/management.js");
+  const { existsSync, statSync } = await import("fs");
+  const { join } = await import("path");
+  const { homedir } = await import("os");
+  const name = options.subcommandArg;
+
+  if (!name) {
+    console.error("Error: Missing tool name. Usage: mcp2cli remove <name>");
+    process.exit(EXIT_INVALID_ARGS);
+  }
+
+  // Validate tool exists before prompting for confirmation
+  const AGENT_TOOLS_DIR = join(homedir(), "agent-tools");
+  const toolPath = join(AGENT_TOOLS_DIR, name);
+  const isValid = name !== "bin" &&
+                  toolPath.startsWith(AGENT_TOOLS_DIR + "/") &&
+                  existsSync(toolPath) &&
+                  statSync(toolPath).isDirectory();
+
+  if (!isValid) {
+    console.error(`Error: Tool "${name}" not found in ~/agent-tools/`);
+    process.exit(EXIT_ERROR);
+  }
+
+  if (!options.yes && !options.dryRun) {
+    const confirmed = await promptConfirmation(`Remove tool "${name}"?`);
+    if (!confirmed) {
+      console.log("Aborted.");
+      process.exit(EXIT_SUCCESS);
+    }
+  }
+
+  const result = removeTool(name, { dryRun: options.dryRun, quiet: options.quiet });
+  if (!result.success) {
+    console.error(`Error: ${result.error}`);
+    process.exit(EXIT_ERROR);
+  }
+}
+
+async function handleRefresh(options) {
+  const { refreshTool, refreshAllTools } = await import("../lib/management.js");
+  const { existsSync, statSync } = await import("fs");
+  const { join } = await import("path");
+  const { homedir } = await import("os");
+  const name = options.subcommandArg;
+  const dryRun = options.dryRun;
+
+  if (name) {
+    const toolPath = join(homedir(), "agent-tools", name);
+    if (!existsSync(toolPath) || !statSync(toolPath).isDirectory()) {
+      console.error(`Error: Tool "${name}" not found`);
+      process.exit(EXIT_ERROR);
+    }
+
+    if (dryRun) {
+      console.log(`DRY RUN: Would refresh "${name}"...\n`);
+    } else {
+      console.log(`Refreshing ${name}...\n`);
+    }
+    const result = refreshTool(name, { dryRun, quiet: options.quiet });
+    printRefreshResult(name, result, dryRun);
+  } else {
+    if (dryRun) {
+      console.log("DRY RUN: Would refresh all tools...\n");
+    } else {
+      console.log("Refreshing all tools...\n");
+    }
+    const results = refreshAllTools({ dryRun, quiet: options.quiet });
+    let totalCreated = 0;
+    let totalUpdated = 0;
+    let totalAdded = 0;
+
+    for (const r of results) {
+      if (r.success) {
+        printRefreshResult(r.name, r, dryRun);
+        totalCreated += r.symlinks.created;
+        if (r.registrationAction === "updated") totalUpdated++;
+        if (r.registrationAction === "added") totalAdded++;
+      }
+    }
+
+    const parts = [];
+    if (totalCreated > 0) parts.push(`${totalCreated} symlinks ${dryRun ? "to create" : "created"}`);
+    if (totalUpdated > 0) parts.push(`${totalUpdated} registrations ${dryRun ? "to update" : "updated"}`);
+    if (totalAdded > 0) parts.push(`${totalAdded} registrations ${dryRun ? "to add" : "added"}`);
+
+    if (parts.length > 0) {
+      console.log(`\n${dryRun ? "Would: " : "Done. "}${parts.join(", ")}.`);
+    } else {
+      console.log("\nNothing to refresh.");
+    }
+  }
+}
+
+function printRefreshResult(name, result, dryRun) {
+  const symPart = result.symlinks.created > 0
+    ? `${result.symlinks.created} symlink${result.symlinks.created > 1 ? "s" : ""} ${dryRun ? "to create" : "created"}`
+    : `${result.symlinks.unchanged || 0} symlink${(result.symlinks.unchanged || 0) !== 1 ? "s" : ""} unchanged`;
+
+  let regPart = "";
+  if (result.registrationAction === "added") {
+    const target = Array.isArray(result.registrationTargets) ? result.registrationTargets[0] : result.registrationTargets;
+    regPart = `registration ${dryRun ? "would be added" : "added"} (${target})`;
+  } else if (result.registrationAction === "updated") {
+    const target = Array.isArray(result.registrationTargets) ? result.registrationTargets.join(", ") : result.registrationTargets;
+    regPart = `registration ${dryRun ? "would be updated" : "updated"} (${target})`;
+  } else if (result.registrationTargets && result.registrationTargets.length === 0) {
+    regPart = "no preset files found";
+  } else {
+    regPart = "registration unchanged";
+  }
+
+  console.log(`${name}: ${symPart}, ${regPart}`);
+}
+
 /**
  * Main entry point
  */
@@ -263,6 +440,47 @@ async function main() {
   // Handle help
   if (options.help) {
     showHelp();
+    process.exit(EXIT_SUCCESS);
+  }
+
+  // Handle subcommands before package validation
+  if (options.subcommand === "list") {
+    const { listInstalledTools, formatToolList, refreshAllTools } = await import("../lib/management.js");
+
+    if (options.fix) {
+      console.log("Fixing missing symlinks and registrations...\n");
+      const results = refreshAllTools({ quiet: options.quiet });
+      let totalFixed = 0;
+      let totalRegistered = 0;
+      for (const r of results) {
+        if (r.success) {
+          totalFixed += r.symlinks.created;
+          if (r.registrationAction === "added" || r.registrationAction === "updated") {
+            totalRegistered++;
+          }
+        }
+      }
+      const parts = [];
+      if (totalFixed > 0) parts.push(`${totalFixed} symlinks created`);
+      if (totalRegistered > 0) parts.push(`${totalRegistered} registrations updated`);
+      if (parts.length > 0) {
+        console.log(`Fixed: ${parts.join(", ")}\n`);
+      }
+    }
+
+    const tools = listInstalledTools();
+    console.log(formatToolList(tools));
+
+    process.exit(EXIT_SUCCESS);
+  }
+
+  if (options.subcommand === "remove") {
+    await handleRemove(options);
+    process.exit(EXIT_SUCCESS);
+  }
+
+  if (options.subcommand === "refresh") {
+    await handleRefresh(options);
     process.exit(EXIT_SUCCESS);
   }
 
@@ -429,9 +647,6 @@ async function main() {
       files["README.md"] = generateBasicReadme(dirName, groups);
     }
 
-    // Generate AGENTS.md entry
-    files["AGENTS-ENTRY.md"] = generateAgentsEntry(dirName, groups, discovery.description);
-
     // Validate parameter coverage
     if (!quiet) console.log("      Validating parameter coverage...");
     const allWarnings = [];
@@ -502,7 +717,7 @@ async function main() {
       const paths = resolveAllPaths(effectiveConfig);
       if (paths.length > 0) {
         if (!quiet) console.log("\n[6/6] Registering tools...");
-        const agentsEntry = files["AGENTS-ENTRY.md"];
+        const agentsEntry = generateAgentsEntry(dirName, groups, discovery.description);
         const results = registerToAll(paths, agentsEntry, dirName, { quiet });
         registeredPaths = getSuccessfulPaths(results);
       }

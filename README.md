@@ -80,6 +80,36 @@ chrome-snapshot --help
 
 > **Note:** If globally installed (`npm install -g mcp-to-pi-tools`), you can omit `npx`.
 
+### Managing Installed Tools
+
+```bash
+# List all installed tools
+npx mcp-to-pi-tools list
+
+# List and fix missing symlinks/registrations
+npx mcp-to-pi-tools list --fix
+
+# Refresh symlinks and registrations for all tools
+npx mcp-to-pi-tools refresh
+
+# Refresh a specific tool
+npx mcp-to-pi-tools refresh chrome-devtools
+
+# Preview what refresh would do
+npx mcp-to-pi-tools refresh --dry-run
+
+# Remove a tool (prompts for confirmation)
+npx mcp-to-pi-tools remove chrome-devtools
+
+# Remove without confirmation
+npx mcp-to-pi-tools remove chrome-devtools -y
+
+# Preview what would be removed
+npx mcp-to-pi-tools remove chrome-devtools --dry-run
+```
+
+**Refresh:** Updates existing tools with missing symlinks (for tools installed before symlink support) and updates registrations to use short command names instead of full paths.
+
 ### Basic
 ```bash
 # NPM packages (default)
@@ -112,7 +142,9 @@ npx mcp-to-pi-tools --command "docker run -i mcp/fetch" fetch
 --dry-run          Preview without writing
 --force, -f        Update existing tools (preserves user files)
 --quiet, -q        Minimal output
+--yes, -y          Skip confirmation prompts (for remove)
 --no-register      Skip auto-registration
+--all-presets      Register to all existing preset files
 --no-symlink       Skip symlink creation
 --symlink-dir <p>  Custom symlink directory (default: ~/agent-tools/bin)
 --force-symlink    Overwrite existing files with symlinks
@@ -135,10 +167,13 @@ npx mcp-to-pi-tools chrome-devtools-mcp --force
 
 ### Registration (Auto-config for agents)
 ```bash
-# Default: Pi (~/.pi/agent/AGENTS.md)
+# Default: first existing preset (pi -> claude -> codex -> gemini)
 npx mcp-to-pi-tools chrome-devtools-mcp
 
-# Multiple agents
+# Register to ALL existing preset files
+npx mcp-to-pi-tools chrome-devtools-mcp --all-presets
+
+# Specific preset(s)
 npx mcp-to-pi-tools chrome-devtools-mcp --preset claude --preset gemini
 
 # Custom paths
@@ -152,7 +187,6 @@ npx mcp-to-pi-tools chrome-devtools-mcp --register-path ~/.config/AGENTS.md
 ```
 ~/agent-tools/<name>/
 ├── README.md           # Human docs
-├── AGENTS-ENTRY.md     # Copy-paste config snippet
 ├── <prefix>-tool1.js   # Executable wrapper
 └── <prefix>-tool2.js
 

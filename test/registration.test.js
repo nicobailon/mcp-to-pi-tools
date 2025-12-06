@@ -132,10 +132,13 @@ describe("resolveAllPaths", () => {
     assert.ok(paths.length >= 2);
   });
 
-  it("should handle empty registerPaths", () => {
+  it("should use fallback chain when registerPaths is empty", () => {
     const config = { registerPaths: [], local: false };
     const paths = resolveAllPaths(config);
-    assert.deepStrictEqual(paths, []);
+    // With empty registerPaths, uses fallback chain (first existing preset)
+    // Result depends on which preset files exist on the system
+    assert.ok(Array.isArray(paths));
+    assert.ok(paths.length <= 1); // At most one from fallback chain
   });
 });
 

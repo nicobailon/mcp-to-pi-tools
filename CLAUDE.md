@@ -26,7 +26,7 @@ mcp-to-pi-tools converts MCP servers into standalone CLI tools for AI agents. It
 **Key Modules** (`lib/`):
 - `discovery.js` - MCP tool discovery via mcporter, server name derivation
 - `grouping.js` - AI-powered tool grouping (combines related MCP tools into single scripts)
-- `generator.js` - AI-powered wrapper script generation, README/AGENTS-ENTRY generation
+- `generator.js` - AI-powered wrapper script generation, README generation
 - `runner.js` - Multi-runner support (npx, uvx, pip, custom commands)
 - `registration.js` - Auto-registration to agent config files (Pi, Claude, Gemini, Codex)
 - `symlink.js` - Auto-symlink creation for PATH-accessible tools
