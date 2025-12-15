@@ -9,6 +9,7 @@
  */
 
 import { checkMcporter, discoverTools, deriveDirName } from "../lib/discovery.js";
+import { isHttpUrl, isValidServerName, escapeTemplateLiteral, escapeDoubleQuotedString } from "../lib/runner.js";
 import { groupTools, fallbackGrouping } from "../lib/grouping.js";
 import {
   generateWrapper,
@@ -56,6 +57,9 @@ function parseArgs(args) {
     uvx: false,
     pip: false,
     command: null,
+    httpUrl: null,
+    description: null,
+    allowHttp: false,
     symlink: true,
     symlinkDir: null,
     forceSymlink: false,
@@ -138,6 +142,18 @@ function parseArgs(args) {
       if (val && !val.startsWith("-")) {
         options.command = val;
       }
+    } else if (arg === "--http-url") {
+      const val = args[++i];
+      if (val && !val.startsWith("-")) {
+        options.httpUrl = val;
+      }
+    } else if (arg === "--description") {
+      const val = args[++i];
+      if (val && !val.startsWith("-")) {
+        options.description = val;
+      }
+    } else if (arg === "--allow-http") {
+      options.allowHttp = true;
     } else if (arg === "--symlink") {
       options.symlink = true;
     } else if (arg === "--no-symlink") {
@@ -206,6 +222,11 @@ Python/Runner:
   --pip                Use pip runner (requires: pip install <package>)
   --command <cmd>      Use explicit command (docker, custom paths, etc.)
 
+HTTP Endpoint:
+  --http-url <url>     Connect to HTTP MCP server endpoint (requires --name, --description)
+  --description <text> Set tool description (required for HTTP servers)
+  --allow-http         Allow plain HTTP for non-localhost URLs (default: localhost only)
+
 AI Agent:
   --agent <name>       Force AI agent for code generation (pi, claude, codex)
                        Default: auto-detect (pi -> claude -> codex)
@@ -234,8 +255,11 @@ Examples:
   mcp2cli --command "docker run -i --rm mcp/fetch" fetch
   mcp2cli chrome-devtools-mcp --preset claude --local
   mcp2cli @org/mcp@latest --output ./tools --no-register
+  mcp2cli --http-url http://127.0.0.1:3845/mcp --name figma --description "Figma design tools"
+  mcp2cli --http-url https://api.example.com/mcp --name api --description "API tools"
 
 Note: Without --uvx or --pip, tries npm first then auto-falls back to uvx.
+      For HTTP endpoints, --name and --description are required. Localhost HTTP is auto-allowed.
 
 Config: ${getConfigPath()}
 
@@ -485,11 +509,37 @@ async function main() {
   }
 
   // Validate required arguments
-  // With --command, package can be omitted (derive name from command)
-  if (!options.package && !options.command) {
-    console.error("Error: Missing required argument: mcp-package");
+  // With --command or --http-url, package can be omitted
+  if (!options.package && !options.command && !options.httpUrl) {
+    console.error("Error: Missing required argument: mcp-package, --command, or --http-url");
     console.error("Run 'mcp2cli --help' for usage information.");
     process.exit(EXIT_INVALID_ARGS);
+  }
+
+  // Validate --http-url requires --name
+  if (options.httpUrl) {
+    if (!isHttpUrl(options.httpUrl)) {
+      console.error(`Error: Invalid HTTP URL: ${options.httpUrl}`);
+      console.error("URL must start with http:// or https://");
+      process.exit(EXIT_INVALID_ARGS);
+    }
+    if (!options.name) {
+      console.error("Error: --name is required when using --http-url");
+      console.error("Example: mcp2cli --http-url http://127.0.0.1:3845/mcp --name figma --description \"Figma design tools\"");
+      process.exit(EXIT_INVALID_ARGS);
+    }
+    if (!options.description) {
+      console.error("Error: --description is required when using --http-url");
+      console.error("HTTP servers have no registry to fetch descriptions from.");
+      console.error("Example: mcp2cli --http-url http://127.0.0.1:3845/mcp --name figma --description \"Figma design tools\"");
+      process.exit(EXIT_INVALID_ARGS);
+    }
+    // Validate server name to prevent shell injection
+    if (!isValidServerName(options.name)) {
+      console.error(`Error: Invalid server name: ${options.name}`);
+      console.error("Name must contain only alphanumeric characters, hyphens, underscores, and dots.");
+      process.exit(EXIT_INVALID_ARGS);
+    }
   }
 
   // Auto-derive package name from --command if not provided
@@ -500,6 +550,11 @@ async function main() {
     const parts = options.command.trim().split(/\s+/);
     const lastPart = parts[parts.length - 1];
     options.package = lastPart.includes("/") ? lastPart.split("/").pop() : lastPart;
+  }
+
+  // For --http-url, use --name as package name
+  if (!options.package && options.httpUrl) {
+    options.package = options.name;
   }
 
   const { quiet } = options;
@@ -570,6 +625,9 @@ async function main() {
       uvx: options.uvx,
       pip: options.pip,
       command: options.command,
+      httpUrl: options.httpUrl,
+      description: options.description,
+      allowHttp: options.allowHttp,
     });
     if (!quiet) {
       console.log(`      Found ${discovery.tools.length} tools (via ${discovery.runner})`);
@@ -618,7 +676,12 @@ async function main() {
           discovery.tools,
           discovery.serverName,
           discovery.mcpCommand,
-          { quiet, agentType }
+          {
+            quiet,
+            agentType,
+            httpUrl: discovery.httpUrl,
+            allowHttp: discovery.allowHttp,
+          }
         );
         files[group.filename] = code;
       } else {
@@ -627,7 +690,11 @@ async function main() {
           group,
           discovery.tools,
           discovery.serverName,
-          discovery.mcpCommand
+          discovery.mcpCommand,
+          {
+            httpUrl: discovery.httpUrl,
+            allowHttp: discovery.allowHttp,
+          }
         );
       }
     }
@@ -737,10 +804,13 @@ async function main() {
  * @param {object} group - Group object
  * @param {Array} tools - Full tool definitions
  * @param {string} serverName - Server name
- * @param {string} mcpCommand - MCP command
+ * @param {string} mcpCommand - MCP command (null for HTTP)
+ * @param {object} httpOptions - HTTP options (optional)
+ * @param {string} httpOptions.httpUrl - HTTP endpoint URL
+ * @param {boolean} httpOptions.allowHttp - Whether --allow-http is needed
  * @returns {string} - Generated code
  */
-function generateFallbackWrapper(group, tools, serverName, mcpCommand) {
+function generateFallbackWrapper(group, tools, serverName, mcpCommand, httpOptions = {}) {
   const tool = tools.find((t) => t.name === group.mcp_tools[0]);
   const params = tool?.inputSchema?.properties || {};
   const required = tool?.inputSchema?.required || [];
@@ -751,6 +821,27 @@ function generateFallbackWrapper(group, tools, serverName, mcpCommand) {
       return `  --${name}${req}: ${schema.description || schema.type || "value"}`;
     })
     .join("\n");
+
+  // Determine transport mode
+  const isHttpMode = !!httpOptions.httpUrl;
+
+  // Build the mcporter call command based on transport
+  // Escape URLs and commands for safe embedding in template literals and strings
+  let callMcpBody;
+  if (isHttpMode) {
+    const allowHttpFlag = httpOptions.allowHttp ? "--allow-http " : "";
+    const escapedHttpUrl = escapeTemplateLiteral(httpOptions.httpUrl);
+    callMcpBody = `const cmd = \`npx mcporter call ${allowHttpFlag}--http-url "${escapedHttpUrl}" \${SERVER}.\${tool} \${paramStr}\`;`;
+  } else {
+    callMcpBody = `const cmd = \`npx mcporter call --stdio "\${MCP_CMD}" \${SERVER}.\${tool} \${paramStr}\`;`;
+  }
+
+  // Build constants based on transport
+  // Escape mcpCommand for safe embedding in double-quoted strings
+  const escapedMcpCommand = escapeDoubleQuotedString(mcpCommand);
+  const constants = isHttpMode
+    ? `const SERVER = "${serverName}";`
+    : `const MCP_CMD = "${escapedMcpCommand}";\nconst SERVER = "${serverName}";`;
 
   return `#!/usr/bin/env node
 
@@ -769,15 +860,14 @@ ${paramDocs ? `  console.log(\`${paramDocs}\`);` : ""}
   process.exit(0);
 }
 
-const MCP_CMD = "${mcpCommand}";
-const SERVER = "${serverName}";
+${constants}
 
 function callMcp(tool, params = {}) {
   const paramStr = Object.entries(params)
     .map(([k, v]) => \`\${k}:\${JSON.stringify(v)}\`)
     .join(" ");
 
-  const cmd = \`npx mcporter call --stdio "\${MCP_CMD}" \${SERVER}.\${tool} \${paramStr}\`;
+  ${callMcpBody}
 
   try {
     return execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });

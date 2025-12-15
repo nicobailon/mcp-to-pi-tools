@@ -132,6 +132,21 @@ npx mcp-to-pi-tools mcp-server-fetch --uvx  # via uvx
 npx mcp-to-pi-tools mcp-server-fetch --pip  # via pip
 ```
 
+### HTTP Servers
+```bash
+# Local HTTP endpoint (localhost auto-allowed)
+npx mcp-to-pi-tools --http-url http://127.0.0.1:3845/mcp --name figma --description "Figma design tools"
+
+# HTTPS endpoints
+npx mcp-to-pi-tools --http-url https://api.example.com/mcp --name api --description "API integration tools"
+
+# Non-localhost HTTP (requires explicit flag)
+npx mcp-to-pi-tools --http-url http://192.168.1.100:8080/mcp --name internal --description "Internal tools" --allow-http
+```
+
+> **Note:** `--name` and `--description` are required for HTTP servers (no package registry to fetch metadata from).
+> **Security:** Plain HTTP is auto-allowed for localhost (127.x.x.x, ::1). For other hosts, use HTTPS or add `--allow-http`.
+
 ### Custom Runners
 ```bash
 npx mcp-to-pi-tools --command "docker run -i mcp/fetch" fetch
@@ -150,6 +165,9 @@ npx mcp-to-pi-tools --command "docker run -i mcp/fetch" fetch
 --force-symlink    Overwrite existing files with symlinks
 --agent <name>     Force AI agent (pi, claude, codex). Auto-detects by default.
                    Note: --preset codex implies --agent codex
+--http-url <url>   Connect to HTTP MCP server endpoint (requires --name, --description)
+--description <t>  Set tool description (required for HTTP servers)
+--allow-http       Allow plain HTTP for non-localhost URLs
 ```
 
 ### Updating Tools
