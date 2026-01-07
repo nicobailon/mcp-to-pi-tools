@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 
 /**
- * mcp2cli - Convert MCP servers into standalone CLI tools for AI agents
+ * mcp-to-pi-tools - Convert MCP servers into tools for AI agents
  *
- * Usage: mcp2cli <mcp-package> [options]
+ * Commands:
+ *   mcp2ext <package>  - Generate pi extension (recommended)
+ *   mcp2cli <package>  - Generate CLI wrapper scripts (legacy)
  *
- * Powered by mcporter. Optimized for Pi agent.
+ * Powered by mcporter.
  */
 
+import { basename } from "path";
 import { checkMcporter, discoverTools, deriveDirName } from "../lib/discovery.js";
-import { groupTools, fallbackGrouping } from "../lib/grouping.js";
+import { groupTools, groupToolsForExtension, fallbackGrouping, fallbackGroupingForExtension } from "../lib/grouping.js";
 import {
   generateWrapper,
   generatePackageJson,
@@ -18,13 +21,16 @@ import {
   generateBasicReadme,
   validateParameterCoverage,
 } from "../lib/generator.js";
-import { writeOutput, outputExists, printSuccess } from "../lib/output.js";
+import { generateExtensionFiles } from "../lib/extension-generator.js";
+import { writeOutput, outputExists, printSuccess, printExtensionSuccess } from "../lib/output.js";
 import { loadConfig, mergeWithCli, getConfigPath } from "../lib/config.js";
 import { registerToAll, resolveAllPaths, getSuccessfulPaths } from "../lib/registration.js";
 import { createSymlinks, getDefaultSymlinkDir } from "../lib/symlink.js";
 import { ensurePathConfigured } from "../lib/shell-config.js";
 import { execSync } from "child_process";
 import { createInterface } from "readline";
+import { homedir } from "os";
+import { join } from "path";
 
 // Exit codes per spec
 const EXIT_SUCCESS = 0;
@@ -34,13 +40,48 @@ const EXIT_DISCOVERY_FAILED = 3;
 const EXIT_GENERATION_FAILED = 4;
 const EXIT_OUTPUT_FAILED = 5;
 
+// Default output directories
+const DEFAULT_EXTENSION_DIR = join(homedir(), ".pi", "agent", "extensions");
+const DEFAULT_CLI_DIR = join(homedir(), "agent-tools");
+
+/**
+ * Detect command mode from script name or first argument
+ * @param {string[]} args - process.argv
+ * @returns {{ mode: "ext" | "cli", args: string[] }}
+ */
+function detectMode(args) {
+  const scriptName = basename(args[1] || "");
+
+  // Check script name first
+  if (scriptName === "mcp2ext" || scriptName.includes("mcp2ext")) {
+    return { mode: "ext", args: args.slice(2) };
+  }
+  if (scriptName === "mcp2cli" || scriptName.includes("mcp2cli")) {
+    return { mode: "cli", args: args.slice(2) };
+  }
+
+  // Check first argument
+  const firstArg = args[2];
+  if (firstArg === "ext" || firstArg === "extension") {
+    return { mode: "ext", args: args.slice(3) };
+  }
+  if (firstArg === "cli") {
+    return { mode: "cli", args: args.slice(3) };
+  }
+
+  // Default to extension mode
+  return { mode: "ext", args: args.slice(2) };
+}
+
 /**
  * Parse command line arguments
- * @param {string[]} args - process.argv.slice(2)
+ * @param {string[]} args - Arguments after mode detection
+ * @param {"ext" | "cli"} mode - Command mode
  * @returns {object} - Parsed options
  */
-function parseArgs(args) {
+function parseArgs(args, mode) {
   const options = {
+    mode,
     package: null,
     name: null,
     output: null,
@@ -48,7 +89,7 @@ function parseArgs(args) {
     quiet: false,
     force: false,
     help: false,
-    register: true,
+    register: mode === "cli", // Only register for CLI mode
     registerPaths: [],
     presets: [],
     allPresets: false,
@@ -56,15 +97,17 @@ function parseArgs(args) {
     uvx: false,
     pip: false,
     command: null,
-    symlink: true,
+    symlink: mode === "cli", // Only symlink for CLI mode
     symlinkDir: null,
     forceSymlink: false,
     agent: null,
-    shellConfig: true,
+    shellConfig: mode === "cli", // Only shell config for CLI mode
     subcommand: null,
     subcommandArg: null,
     yes: false,
     fix: false,
+    cleanup: false,
+    all: false,
   };
 
   if (args.length > 0 && !args[0].startsWith("-")) {
@@ -81,6 +124,14 @@ function parseArgs(args) {
       }
     } else if (args[0] === "refresh") {
       options.subcommand = "refresh";
+      if (args[1] && !args[1].startsWith("-")) {
+        options.subcommandArg = args[1];
+        args = args.slice(2);
+      } else {
+        args = args.slice(1);
+      }
+    } else if (args[0] === "migrate") {
+      options.subcommand = "migrate";
       if (args[1] && !args[1].startsWith("-")) {
         options.subcommandArg = args[1];
         args = args.slice(2);
@@ -162,6 +213,10 @@ function parseArgs(args) {
       options.yes = true;
     } else if (arg === "--fix") {
       options.fix = true;
+    } else if (arg === "--cleanup") {
+      options.cleanup = true;
+    } else if (arg === "--all") {
+      options.all = true;
     } else if (!arg.startsWith("-") && !options.package) {
       options.package = arg;
     }
@@ -171,16 +226,74 @@ function parseArgs(args) {
 }
 
 /**
- * Show help text
+ * Show help text for mcp2ext
  */
-function showHelp() {
+function showExtHelp() {
+  console.log(`Usage: mcp2ext <mcp-package> [options]
+       mcp2ext list
+       mcp2ext remove <name> [options]
+       mcp2ext refresh [name] [options]
+       mcp2ext migrate [name] [options]
+
+Generate a pi extension from an MCP server.
+Extensions are auto-discovered by pi from ~/.pi/agent/extensions/
+
+Commands:
+  list                 List installed MCP extensions
+  remove <name>        Remove an extension
+  refresh [name]       Regenerate extension(s) from latest MCP schema
+  migrate [name]       Migrate CLI tool(s) from ~/agent-tools/ to extension
+                       Use --all to migrate all, --cleanup to remove old
+
+Arguments:
+  mcp-package          Package name (npm or Python)
+
+Options:
+  --name <name>        Extension directory name (default: derived from package)
+  --output <path>      Output path (default: ~/.pi/agent/extensions/<name>)
+  --dry-run            Preview generated files without writing
+  --quiet, -q          Suppress progress output
+  --force, -f          Overwrite existing extension
+  --yes, -y            Skip confirmation prompts (for remove)
+  --help, -h           Show this help message
+
+Python/Runner:
+  --uvx                Use uvx runner (Python packages, no install needed)
+  --pip                Use pip runner (requires: pip install <package>)
+  --command <cmd>      Use explicit command (docker, custom paths, etc.)
+
+AI Agent:
+  --agent <name>       Force AI agent for grouping (pi, claude, codex)
+                       Default: auto-detect (pi -> claude -> codex)
+
+Examples:
+  mcp2ext chrome-devtools-mcp                    # npm package
+  mcp2ext mcp-server-fetch --uvx                 # Python via uvx
+  mcp2ext --command "uvx mcp-server-time" --name time
+
+Config: ${getConfigPath(true)}
+
+Exit Codes:
+  0  Success
+  1  General error
+  2  Invalid arguments
+  3  Discovery failed
+  4  Generation failed
+  5  Output write failed
+`);
+}
+
+/**
+ * Show help text for mcp2cli (legacy)
+ */
+function showCliHelp() {
   console.log(`Usage: mcp2cli <mcp-package> [options]
        mcp2cli list [--fix]
        mcp2cli remove <name> [options]
        mcp2cli refresh [name] [options]
 
 Convert an MCP server into standalone CLI tools for AI agents.
-Powered by mcporter. Optimized for Pi agent.
+Powered by mcporter. (Legacy mode - consider using mcp2ext instead)
 
 Commands:
   list                 List all installed tools
@@ -237,7 +350,7 @@ Examples:
 
 Note: Without --uvx or --pip, tries npm first then auto-falls back to uvx.
 
-Config: ${getConfigPath()}
+Config: ${getConfigPath(true)}
 
 Exit Codes:
   0  Success
@@ -314,11 +427,155 @@ async function promptConfirmation(message) {
   });
 }
 
-async function handleRemove(options) {
+async function handleExtRemove(options) {
+  const { listInstalledExtensions, removeExtension } = await import("../lib/management.js");
+  const { existsSync, statSync } = await import("fs");
+  const name = options.subcommandArg;
+
+  if (!name) {
+    console.error("Error: Missing extension name. Usage: mcp2ext remove <name>");
+    process.exit(EXIT_INVALID_ARGS);
+  }
+
+  // Validate extension exists
+  const extPath = join(DEFAULT_EXTENSION_DIR, name);
+  if (!existsSync(extPath) || !statSync(extPath).isDirectory()) {
+    console.error(`Error: Extension "${name}" not found in ~/.pi/agent/extensions/`);
+    process.exit(EXIT_ERROR);
+  }
+
+  if (!options.yes && !options.dryRun) {
+    const confirmed = await promptConfirmation(`Remove extension "${name}"?`);
+    if (!confirmed) {
+      console.log("Aborted.");
+      process.exit(EXIT_SUCCESS);
+    }
+  }
+
+  const result = removeExtension(name, { dryRun: options.dryRun, quiet: options.quiet });
+  if (!result.success) {
+    console.error(`Error: ${result.error}`);
+    process.exit(EXIT_ERROR);
+  }
+}
+
+async function handleExtList(options) {
+  const { listInstalledExtensions, formatExtensionList } = await import("../lib/management.js");
+  const extensions = listInstalledExtensions();
+  console.log(formatExtensionList(extensions));
+}
+
+async function handleExtMigrate(options) {
+  const { scanCliTools, migrateTool, migrateAll, formatMigrationScan } = await import("../lib/migration.js");
+
+  // Detect AI agent
+  let agentType = null;
+  const validAgents = ["pi", "claude", "codex"];
+  const agentCheckers = { pi: checkPi, claude: checkClaude, codex: checkCodex };
+
+  if (options.agent) {
+    if (!validAgents.includes(options.agent)) {
+      console.error(`Error: Unknown agent '${options.agent}'. Valid: ${validAgents.join(", ")}`);
+      process.exit(EXIT_INVALID_ARGS);
+    }
+    if (!agentCheckers[options.agent]()) {
+      console.error(`Error: Requested agent '${options.agent}' is not available`);
+      process.exit(EXIT_ERROR);
+    }
+    agentType = options.agent;
+  } else {
+    agentType = checkPi() ? "pi" : checkClaude() ? "claude" : checkCodex() ? "codex" : null;
+  }
+
+  // If no name and no --all, show scan results
+  if (!options.subcommandArg && !options.all) {
+    const tools = scanCliTools();
+    console.log(formatMigrationScan(tools));
+    process.exit(EXIT_SUCCESS);
+  }
+
+  // Migrate all
+  if (options.all) {
+    if (!options.yes && !options.dryRun) {
+      const tools = scanCliTools();
+      const migrateable = tools.filter((t) => t.canMigrate);
+      if (migrateable.length === 0) {
+        console.log("No CLI tools found that can be migrated.");
+        process.exit(EXIT_SUCCESS);
+      }
+      const cleanupNote = options.cleanup ? " and remove old CLI tools" : "";
+      const confirmed = await promptConfirmation(`Migrate ${migrateable.length} CLI tools to extensions${cleanupNote}?`);
+      if (!confirmed) {
+        console.log("Aborted.");
+        process.exit(EXIT_SUCCESS);
+      }
+    }
+
+    const results = await migrateAll({
+      dryRun: options.dryRun,
+      quiet: options.quiet,
+      cleanup: options.cleanup,
+      force: options.force,
+      agentType,
+    });
+
+    if (!options.quiet && !options.dryRun) {
+      console.log("\nMigration Summary:");
+      console.log(`  Migrated: ${results.migrated.length}`);
+      if (results.skipped.length > 0) {
+        console.log(`  Skipped:  ${results.skipped.length} (no MCP command found)`);
+      }
+      if (results.failed.length > 0) {
+        console.log(`  Failed:   ${results.failed.length}`);
+        for (const f of results.failed) {
+          console.log(`    - ${f.name}: ${f.error}`);
+        }
+      }
+    }
+
+    process.exit(results.success ? EXIT_SUCCESS : EXIT_ERROR);
+  }
+
+  // Migrate single tool
+  const name = options.subcommandArg;
+
+  if (!options.yes && !options.dryRun) {
+    const cleanupNote = options.cleanup ? " and remove old CLI tool" : "";
+    const confirmed = await promptConfirmation(`Migrate "${name}" to extension${cleanupNote}?`);
+    if (!confirmed) {
+      console.log("Aborted.");
+      process.exit(EXIT_SUCCESS);
+    }
+  }
+
+  const result = await migrateTool(name, {
+    dryRun: options.dryRun,
+    quiet: options.quiet,
+    cleanup: options.cleanup,
+    force: options.force,
+    agentType,
+  });
+
+  if (!result.success) {
+    console.error(`Error: ${result.error}`);
+    process.exit(EXIT_ERROR);
+  }
+
+  if (!options.dryRun && !options.quiet) {
+    console.log(`\nMigration complete!`);
+    console.log(`  Extension: ~/.pi/agent/extensions/${name}/`);
+    console.log(`  Tools: ${result.groupsCount} grouped tools from ${result.toolsCount} MCP tools`);
+    if (result.cleanup) {
+      console.log(`  Removed: ~/agent-tools/${name}/`);
+    }
+  }
+
+  process.exit(EXIT_SUCCESS);
+}
+
+async function handleCliRemove(options) {
   const { removeTool } = await import("../lib/management.js");
   const { existsSync, statSync } = await import("fs");
-  const { join } = await import("path");
-  const { homedir } = await import("os");
   const name = options.subcommandArg;
 
   if (!name) {
@@ -327,10 +584,9 @@ async function handleRemove(options) {
   }
 
   // Validate tool exists before prompting for confirmation
-  const AGENT_TOOLS_DIR = join(homedir(), "agent-tools");
-  const toolPath = join(AGENT_TOOLS_DIR, name);
+  const toolPath = join(DEFAULT_CLI_DIR, name);
   const isValid = name !== "bin" &&
-                  toolPath.startsWith(AGENT_TOOLS_DIR + "/") &&
+                  toolPath.startsWith(DEFAULT_CLI_DIR + "/") &&
                   existsSync(toolPath) &&
                   statSync(toolPath).isDirectory();
 
@@ -354,16 +610,14 @@ async function handleRemove(options) {
   }
 }
 
-async function handleRefresh(options) {
+async function handleCliRefresh(options) {
   const { refreshTool, refreshAllTools } = await import("../lib/management.js");
   const { existsSync, statSync } = await import("fs");
-  const { join } = await import("path");
-  const { homedir } = await import("os");
   const name = options.subcommandArg;
   const dryRun = options.dryRun;
 
   if (name) {
-    const toolPath = join(homedir(), "agent-tools", name);
+    const toolPath = join(DEFAULT_CLI_DIR, name);
     if (!existsSync(toolPath) || !statSync(toolPath).isDirectory()) {
       console.error(`Error: Tool "${name}" not found`);
       process.exit(EXIT_ERROR);
@@ -431,19 +685,189 @@ function printRefreshResult(name, result, dryRun) {
 }
 
 /**
- * Main entry point
+ * Main entry point for mcp2ext (extension generation)
  */
-async function main() {
-  const args = process.argv.slice(2);
-  const options = parseArgs(args);
+async function mainExt(options) {
+  const { quiet } = options;
 
-  // Handle help
-  if (options.help) {
-    showHelp();
+  // Handle subcommands
+  if (options.subcommand === "list") {
+    await handleExtList(options);
     process.exit(EXIT_SUCCESS);
   }
 
-  // Handle subcommands before package validation
+  if (options.subcommand === "remove") {
+    await handleExtRemove(options);
+    process.exit(EXIT_SUCCESS);
+  }
+
+  if (options.subcommand === "refresh") {
+    // TODO: Implement extension refresh
+    console.error("Error: Extension refresh not yet implemented");
+    process.exit(EXIT_ERROR);
+  }
+
+  if (options.subcommand === "migrate") {
+    await handleExtMigrate(options);
+    process.exit(EXIT_SUCCESS);
+  }
+
+  // Validate required arguments
+  if (!options.package && !options.command) {
+    console.error("Error: Missing required argument: mcp-package");
+    console.error("Run 'mcp2ext --help' for usage information.");
+    process.exit(EXIT_INVALID_ARGS);
+  }
+
+  // Auto-derive package name from --command if not provided
+  if (!options.package && options.command) {
+    const parts = options.command.trim().split(/\s+/);
+    const lastPart = parts[parts.length - 1];
+    options.package = lastPart.includes("/") ? lastPart.split("/").pop() : lastPart;
+  }
+
+  // Check dependencies
+  if (!quiet) console.log("\n[1/5] Checking dependencies...");
+
+  if (!checkMcporter()) {
+    console.error("Error: mcporter is not available.");
+    console.error("Install with: npm install -g mcporter");
+    process.exit(EXIT_ERROR);
+  }
+  if (!quiet) console.log("      mcporter: ✓");
+
+  // Detect AI agent
+  let agentType;
+  const validAgents = ["pi", "claude", "codex"];
+  const agentCheckers = { pi: checkPi, claude: checkClaude, codex: checkCodex };
+
+  if (options.agent) {
+    if (!validAgents.includes(options.agent)) {
+      console.error(`Error: Unknown agent '${options.agent}'. Valid: ${validAgents.join(", ")}`);
+      process.exit(EXIT_INVALID_ARGS);
+    }
+    if (!agentCheckers[options.agent]()) {
+      console.error(`Error: Requested agent '${options.agent}' is not available`);
+      process.exit(EXIT_ERROR);
+    }
+    agentType = options.agent;
+    if (!quiet) console.log(`      ${agentType}: ✓ (forced)`);
+  } else {
+    agentType = checkPi() ? "pi" : checkClaude() ? "claude" : checkCodex() ? "codex" : null;
+    if (!agentType) {
+      console.warn("      Warning: No AI agent (pi/claude/codex) available, using fallback");
+    } else if (!quiet) {
+      console.log(`      ${agentType}: ✓`);
+    }
+  }
+
+  // Derive names
+  const dirName = options.name || deriveDirName(options.package);
+  const outputDir = options.output || join(DEFAULT_EXTENSION_DIR, dirName);
+
+  if (!quiet) {
+    console.log(`      Output: ${outputDir}`);
+  }
+
+  // Check if output exists
+  if (outputExists(outputDir) && !options.force && !options.dryRun) {
+    console.error(`Error: Output directory exists: ${outputDir}`);
+    console.error("Use --force to overwrite or --dry-run to preview.");
+    process.exit(EXIT_OUTPUT_FAILED);
+  }
+
+  // Phase 1: Discovery
+  if (!quiet) console.log("\n[2/5] Discovering MCP tools...");
+
+  let discovery;
+  try {
+    discovery = await discoverTools(options.package, {
+      quiet,
+      uvx: options.uvx,
+      pip: options.pip,
+      command: options.command,
+    });
+    if (!quiet) {
+      console.log(`      Found ${discovery.tools.length} tools (via ${discovery.runner})`);
+    }
+  } catch (error) {
+    console.error(`Error: Discovery failed - ${error.message}`);
+    process.exit(EXIT_DISCOVERY_FAILED);
+  }
+
+  // Phase 2: Grouping
+  if (!quiet) console.log("\n[3/5] Analyzing tool groupings...");
+
+  let groups;
+  try {
+    if (agentType) {
+      groups = await groupToolsForExtension(discovery.serverName, discovery.tools, { quiet, agentType });
+    } else {
+      groups = fallbackGroupingForExtension(discovery.serverName, discovery.tools);
+      if (!quiet) {
+        console.log(`      Created ${groups.length} groups (fallback mode)`);
+      }
+    }
+  } catch (error) {
+    console.error(`Error: Grouping failed - ${error.message}`);
+    console.error("      Falling back to 1:1 mapping...");
+    groups = fallbackGroupingForExtension(discovery.serverName, discovery.tools);
+  }
+
+  // Phase 3: Generate extension
+  if (!quiet) console.log("\n[4/5] Generating pi extension...");
+
+  let files;
+  try {
+    files = generateExtensionFiles({
+      name: dirName,
+      serverName: discovery.serverName,
+      mcpCommand: discovery.mcpCommand,
+      packageName: options.package,
+      groups,
+      tools: discovery.tools,
+      description: discovery.description,
+    });
+
+    if (!quiet) {
+      console.log(`      Generated ${Object.keys(files).length} files`);
+    }
+  } catch (error) {
+    console.error(`Error: Generation failed - ${error.message}`);
+    process.exit(EXIT_GENERATION_FAILED);
+  }
+
+  // Phase 4: Write output
+  if (!quiet) console.log("\n[5/5] Writing output files...");
+
+  try {
+    writeOutput(outputDir, files, {
+      dryRun: options.dryRun,
+      force: options.force,
+      quiet,
+      packageName: dirName,
+      isExtension: true,
+    });
+  } catch (error) {
+    console.error(`Error: Failed to write output - ${error.message}`);
+    process.exit(EXIT_OUTPUT_FAILED);
+  }
+
+  // Success
+  if (!options.dryRun) {
+    printExtensionSuccess(outputDir, groups.length);
+  }
+
+  process.exit(EXIT_SUCCESS);
+}
+
+/**
+ * Main entry point for mcp2cli (CLI wrapper generation - legacy)
+ */
+async function mainCli(options) {
+  const { quiet } = options;
+
+  // Handle subcommands
   if (options.subcommand === "list") {
     const { listInstalledTools, formatToolList, refreshAllTools } = await import("../lib/management.js");
 
@@ -475,17 +899,16 @@ async function main() {
   }
 
   if (options.subcommand === "remove") {
-    await handleRemove(options);
+    await handleCliRemove(options);
     process.exit(EXIT_SUCCESS);
   }
 
   if (options.subcommand === "refresh") {
-    await handleRefresh(options);
+    await handleCliRefresh(options);
     process.exit(EXIT_SUCCESS);
   }
 
   // Validate required arguments
-  // With --command, package can be omitted (derive name from command)
   if (!options.package && !options.command) {
     console.error("Error: Missing required argument: mcp-package");
     console.error("Run 'mcp2cli --help' for usage information.");
@@ -494,15 +917,10 @@ async function main() {
 
   // Auto-derive package name from --command if not provided
   if (!options.package && options.command) {
-    // Extract last word from command as package name
-    // "docker run -i --rm mcp/fetch" -> "mcp/fetch" -> "fetch"
-    // "uvx mcp-server-fetch" -> "mcp-server-fetch"
     const parts = options.command.trim().split(/\s+/);
     const lastPart = parts[parts.length - 1];
     options.package = lastPart.includes("/") ? lastPart.split("/").pop() : lastPart;
   }
-
-  const { quiet } = options;
 
   // Check dependencies
   if (!quiet) console.log("\n[1/6] Checking dependencies...");
@@ -518,7 +936,6 @@ async function main() {
   const validAgents = ["pi", "claude", "codex"];
   const agentCheckers = { pi: checkPi, claude: checkClaude, codex: checkCodex };
 
-  // Determine requested agent: explicit --agent flag, or infer from --preset
   let requestedAgent = options.agent;
   if (!requestedAgent && options.presets.includes("codex")) {
     requestedAgent = "codex";
@@ -594,7 +1011,6 @@ async function main() {
     }
   } catch (error) {
     console.error(`Error: Grouping failed - ${error.message}`);
-    // Try fallback
     console.error("      Falling back to 1:1 mapping...");
     groups = fallbackGrouping(discovery.serverName, discovery.tools);
   }
@@ -605,7 +1021,6 @@ async function main() {
   const files = {};
 
   try {
-    // Generate each wrapper
     for (let i = 0; i < groups.length; i++) {
       const group = groups[i];
       if (!quiet) {
@@ -622,7 +1037,6 @@ async function main() {
         );
         files[group.filename] = code;
       } else {
-        // Fallback: generate basic wrapper without AI agent
         files[group.filename] = generateFallbackWrapper(
           group,
           discovery.tools,
@@ -632,7 +1046,6 @@ async function main() {
       }
     }
 
-    // Generate supporting files
     if (!quiet) console.log("      Generating supporting files...");
 
     files["package.json"] = generatePackageJson(
@@ -640,14 +1053,12 @@ async function main() {
       `${discovery.serverName} automation`
     );
 
-    // Generate README (uses AI agent if available)
     if (agentType) {
       files["README.md"] = await generateReadme(dirName, groups, discovery.tools, { quiet, agentType });
     } else {
       files["README.md"] = generateBasicReadme(dirName, groups);
     }
 
-    // Validate parameter coverage
     if (!quiet) console.log("      Validating parameter coverage...");
     const allWarnings = [];
     for (const group of groups) {
@@ -703,7 +1114,6 @@ async function main() {
         quiet,
       });
 
-      // Auto-configure shell PATH if symlinks were created
       if (options.shellConfig) {
         shellConfigResult = ensurePathConfigured();
         if (shellConfigResult.success && shellConfigResult.action === "added" && !quiet) {
@@ -734,11 +1144,6 @@ async function main() {
 
 /**
  * Generate a basic wrapper without Pi (fallback)
- * @param {object} group - Group object
- * @param {Array} tools - Full tool definitions
- * @param {string} serverName - Server name
- * @param {string} mcpCommand - MCP command
- * @returns {string} - Generated code
  */
 function generateFallbackWrapper(group, tools, serverName, mcpCommand) {
   const tool = tools.find((t) => t.name === group.mcp_tools[0]);
@@ -793,7 +1198,6 @@ for (let i = 0; i < args.length; i++) {
   if (arg.startsWith("--") && i + 1 < args.length) {
     const key = arg.slice(2);
     const value = args[++i];
-    // Try to parse as JSON, otherwise use as string
     try {
       params[key] = JSON.parse(value);
     } catch {
@@ -810,6 +1214,31 @@ try {
   process.exit(1);
 }
 `;
+}
+
+/**
+ * Main entry point
+ */
+async function main() {
+  const { mode, args } = detectMode(process.argv);
+  const options = parseArgs(args, mode);
+
+  // Handle help
+  if (options.help) {
+    if (mode === "ext") {
+      showExtHelp();
+    } else {
+      showCliHelp();
+    }
+    process.exit(EXIT_SUCCESS);
+  }
+
+  // Route to appropriate main function
+  if (mode === "ext") {
+    await mainExt(options);
+  } else {
+    await mainCli(options);
+  }
 }
 
 // Run main

@@ -23,6 +23,7 @@
     "pi-agent"
   ],
   "bin": {
+    "mcp2ext": "./bin/mcp-to-pi-tools.js",
     "mcp2cli": "./bin/mcp-to-pi-tools.js",
     "mcp-to-pi-tools": "./bin/mcp-to-pi-tools.js"
   },

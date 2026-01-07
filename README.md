@@ -4,7 +4,7 @@
 
 # mcp-to-pi-tools
 
-**One command turns any MCP server into persistent, agent-ready CLI tools—built for [Pi](https://github.com/badlogic/pi-mono)'s tool conventions.**
+**One command turns any MCP server into native pi tools—with automatic grouping, TypeBox schemas, and zero configuration.**
 
 [![npm version](https://img.shields.io/npm/v/mcp-to-pi-tools?style=for-the-badge)](https://www.npmjs.com/package/mcp-to-pi-tools)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
@@ -14,214 +14,200 @@
 npx mcp-to-pi-tools chrome-devtools-mcp
 ```
 
-## The Problem
-
-[mcporter](https://github.com/steipete/mcporter) converts MCP servers to CLI tools, but using them creates friction for coding agents:
-
-- **Complex syntax** - Agents must construct 100+ character commands correctly
-- **Unreliable execution** - Even when documented, agents frequently fumble the CLI syntax, requiring multiple retry loops
-- **Poor ergonomics** - Abstract commands feel clunky vs. purpose-built scripts
-- **No self-documentation** - Agents can't explore tools via `--help`
-
-**Result:** Agents struggle to use mcporter-converted MCP tools reliably. Even useful MCP tools go underutilized because the CLI interface creates too much friction.
-
-## The Solution
-
-Generate simple, self-documenting CLI tools with short symlinks agents can reliably invoke:
-
-```bash
-# Before: 100+ char mcporter commands agents struggle to construct
-npx mcporter call --stdio "npx -y chrome-devtools-mcp" chrome-devtools.take_snapshot format:"png"
-
-# After: Short symlinks agents execute reliably
-chrome-snapshot --format png
-```
-
-| Approach | Command Length | Agent Reliability |
-|----------|---------------|-------------------|
-| Raw mcporter | 100+ chars | Agents fumble syntax, retry loops |
-| Full path | ~55 chars | Reliable but verbose |
-| **Symlink** | **~25 chars** | **Minimal, reliable** |
-
-## Why This Works for Pi (and other agents)
-
-**Pi doesn't support MCP directly.** Instead, it relies on simple CLI tools that agents invoke via Bash. The pattern is:
-
-1. Create a CLI tool (any language, any executable)
-2. Write a README describing usage
-3. Reference it in `AGENTS.md` (global or project-specific)
-
-This tool automates that pattern for MCP servers:
-
-1. **Discovers** MCP tools via mcporter
-2. **Generates** each as a standalone executable + README
-3. **Registers** them in `AGENTS.md` format
-
-**Result:** MCP tools become first-class Pi-native tools that agents invoke directly.
-
-*For the rationale behind this approach, see [What if you don't need MCP?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/) by Mario Zechner.*
-
 ## Quick Start
 
 ```bash
-# Generate tools (Node 18+ required)
+# Generate a pi extension from any MCP server
 npx mcp-to-pi-tools chrome-devtools-mcp
 
-# Use immediately via symlink
-chrome-snapshot --help
+# Python packages work too
+npx mcp-to-pi-tools mcp-server-time --uvx
 
-# Or via full path
-~/agent-tools/chrome-devtools/chrome-snapshot.js --help
+# List installed extensions
+npx mcp-to-pi-tools list
 ```
 
-> **Note:** Ensure `~/agent-tools/bin` is in your PATH for symlinks to work.
+Extensions are auto-discovered by pi from `~/.pi/agent/extensions/`—no registration needed.
+
+## What It Does
+
+1. **Discovers** MCP tools via [mcporter](https://github.com/steipete/mcporter)
+2. **Groups** related tools using AI (e.g., click + hover + drag → `chrome_interact`)
+3. **Generates** a TypeScript pi extension with:
+   - `pi.registerTool()` for each grouped tool
+   - TypeBox schemas for parameter validation
+   - Action discriminators for multi-tool groups
+4. **Writes** to `~/.pi/agent/extensions/<name>/`
+
+## Generated Extension Structure
+
+```
+~/.pi/agent/extensions/chrome-devtools/
+├── index.ts          # Pi extension with registerTool() calls
+├── package.json      # Manifest with MCP source info
+└── README.md         # Tool documentation
+```
+
+### Example Generated Tool
+
+```typescript
+// Grouped tool: chrome_interact (wraps: click, hover, drag)
+pi.registerTool({
+  name: "chrome_interact",
+  label: "Chrome Interact",
+  description: "Mouse interactions on page elements",
+  parameters: Type.Object({
+    action: StringEnum(["click", "hover", "drag"] as const),
+    uid: Type.String({ description: "Element UID from snapshot" }),
+    doubleClick: Type.Optional(Type.Boolean()),
+  }),
+  async execute(toolCallId, params, onUpdate, ctx, signal) {
+    const result = callMcp(params.action, { uid: params.uid, ... });
+    return { content: [{ type: "text", text: result }], details: {} };
+  },
+});
+```
 
 ## Usage
 
-> **Note:** If globally installed (`npm install -g mcp-to-pi-tools`), you can omit `npx`.
-
-### Managing Installed Tools
+### Generate Extensions
 
 ```bash
-# List all installed tools
-npx mcp-to-pi-tools list
+# NPM packages
+mcp2ext chrome-devtools-mcp
+mcp2ext @upstash/context7-mcp
 
-# List and fix missing symlinks/registrations
-npx mcp-to-pi-tools list --fix
+# Python packages
+mcp2ext mcp-server-fetch --uvx
+mcp2ext mcp-server-time --pip
 
-# Refresh symlinks and registrations for all tools
-npx mcp-to-pi-tools refresh
-
-# Refresh a specific tool
-npx mcp-to-pi-tools refresh chrome-devtools
-
-# Preview what refresh would do
-npx mcp-to-pi-tools refresh --dry-run
-
-# Remove a tool (prompts for confirmation)
-npx mcp-to-pi-tools remove chrome-devtools
-
-# Remove without confirmation
-npx mcp-to-pi-tools remove chrome-devtools -y
-
-# Preview what would be removed
-npx mcp-to-pi-tools remove chrome-devtools --dry-run
+# Custom command
+mcp2ext --command "docker run -i mcp/fetch" --name fetch
 ```
 
-**Refresh:** Updates existing tools with missing symlinks (for tools installed before symlink support) and updates registrations to use short command names instead of full paths.
+### Manage Extensions
 
-### Basic
 ```bash
-# NPM packages (default)
-npx mcp-to-pi-tools chrome-devtools-mcp
+# List installed extensions
+mcp2ext list
 
-# Scoped packages
-npx mcp-to-pi-tools @org/mcp@1.2.3
+# Remove an extension
+mcp2ext remove chrome-devtools
 
-# Custom name/location
-npx mcp-to-pi-tools chrome-devtools-mcp --name browser-tools --output ./tools
-```
-
-### Python Servers
-```bash
-# Auto-detects uvx (no install needed)
-npx mcp-to-pi-tools mcp-server-fetch
-
-# Or be explicit
-npx mcp-to-pi-tools mcp-server-fetch --uvx  # via uvx
-npx mcp-to-pi-tools mcp-server-fetch --pip  # via pip
-```
-
-### Custom Runners
-```bash
-npx mcp-to-pi-tools --command "docker run -i mcp/fetch" fetch
+# Regenerate from latest MCP schema (coming soon)
+mcp2ext refresh chrome-devtools
 ```
 
 ### Options
+
 ```
---dry-run          Preview without writing
---force, -f        Update existing tools (preserves user files)
---quiet, -q        Minimal output
---yes, -y          Skip confirmation prompts (for remove)
---no-register      Skip auto-registration
---all-presets      Register to all existing preset files
---no-symlink       Skip symlink creation
---symlink-dir <p>  Custom symlink directory (default: ~/agent-tools/bin)
---force-symlink    Overwrite existing files with symlinks
---agent <name>     Force AI agent (pi, claude, codex). Auto-detects by default.
-                   Note: --preset codex implies --agent codex
+--name <name>        Extension directory name (default: derived from package)
+--output <path>      Output path (default: ~/.pi/agent/extensions/<name>)
+--dry-run            Preview generated files without writing
+--force, -f          Overwrite existing extension
+--quiet, -q          Suppress progress output
+--agent <name>       Force AI agent for grouping (pi, claude, codex)
 ```
 
-### Updating Tools
+### Python/Runner Options
 
-Re-run the same command with `--force` to update existing tools:
+```
+--uvx                Use uvx runner (Python packages, no install needed)
+--pip                Use pip runner (requires: pip install <package>)
+--command <cmd>      Use explicit command (docker, custom paths, etc.)
+```
+
+## Migrating from CLI Format
+
+If you have existing tools in `~/agent-tools/`, migrate them to extensions:
 
 ```bash
-npx mcp-to-pi-tools chrome-devtools-mcp --force
+# Scan for migrateable tools
+mcp2ext migrate
+
+# Migrate all at once
+mcp2ext migrate --all --cleanup
+
+# Migrate one tool
+mcp2ext migrate chrome-dev-tools --cleanup
 ```
 
-**Smart updates:**
-- Generated files are replaced, user-added files preserved
-- Registration entries are updated in-place (no duplicates)
-- Symlinks updated if targets changed
-
-### Registration (Auto-config for agents)
-```bash
-# Default: first existing preset (pi -> claude -> codex -> gemini)
-npx mcp-to-pi-tools chrome-devtools-mcp
-
-# Register to ALL existing preset files
-npx mcp-to-pi-tools chrome-devtools-mcp --all-presets
-
-# Specific preset(s)
-npx mcp-to-pi-tools chrome-devtools-mcp --preset claude --preset gemini
-
-# Custom paths
-npx mcp-to-pi-tools chrome-devtools-mcp --register-path ~/.config/AGENTS.md
-```
-
-**Presets:** `pi`, `claude`, `gemini`, `codex` (maps to default paths)
-
-## Generated Output
-
-```
-~/agent-tools/<name>/
-├── README.md           # Human docs
-├── <prefix>-tool1.js   # Executable wrapper
-└── <prefix>-tool2.js
-
-~/agent-tools/bin/          # Symlinks for PATH access
-├── <prefix>-tool1 → ../<name>/<prefix>-tool1.js
-└── <prefix>-tool2 → ../<name>/<prefix>-tool2.js
-```
-
-Each wrapper:
-- Has `#!/usr/bin/env node` shebang
-- Supports `--help` with examples
-- Outputs errors to stderr
-- Uses ES modules
-- Symlinked without `.js` extension for cleaner invocation
+See [MIGRATION.md](MIGRATION.md) for the full migration guide.
 
 ## Configuration
 
-Create `~/agent-tools/mcp2cli.settings.json` for defaults:
+Create `~/.pi/agent/mcp2ext.settings.json` for defaults:
 
 ```json
 {
-  "register": true,
-  "registerPaths": ["~/.pi/agent/AGENTS.md", "~/.claude/CLAUDE.md"],
-  "symlink": true,
-  "symlinkDir": "~/agent-tools/bin"
+  "agent": "pi"
 }
 ```
+
+## How Tool Grouping Works
+
+AI analyzes MCP tools and groups related operations:
+
+| MCP Tools | Grouped Tool | Action Values |
+|-----------|--------------|---------------|
+| click, hover, drag | `chrome_interact` | click, hover, drag |
+| take_screenshot | `chrome_screenshot` | (single tool, no action) |
+| list_console_messages, get_console_message | `chrome_console` | list, get |
+
+For multi-tool groups:
+- An `action` parameter is added with enum of tool names
+- Parameters from all tools are merged (common ones stay required, tool-specific become optional)
+- Execute function dispatches to the appropriate MCP tool
 
 ## Troubleshooting
 
 | Issue | Fix |
 |-------|-----|
 | `mcporter not found` | `npm install -g mcporter` |
-| Discovery timeout | `MCPORTER_CALL_TIMEOUT=120000 npx mcp-to-pi-tools <pkg>` |
+| Discovery timeout | `MCPORTER_CALL_TIMEOUT=120000 mcp2ext <pkg>` |
 | No AI agent | Works without Pi/Claude (1:1 tool mapping) |
+| Extension not loading | Restart pi to pick up new extensions |
+
+---
+
+## Legacy: CLI Wrapper Format
+
+The original `mcp2cli` command generates shell-invokable CLI scripts instead of native extensions.
+This format is still supported but deprecated in favor of `mcp2ext`.
+
+### CLI Usage
+
+```bash
+# Generate CLI wrappers (legacy)
+mcp2cli chrome-devtools-mcp
+
+# Manage CLI tools
+mcp2cli list
+mcp2cli remove chrome-devtools
+mcp2cli refresh
+```
+
+### CLI Output
+
+```
+~/agent-tools/<name>/
+├── README.md
+├── chrome-snapshot.js
+└── chrome-interact.js
+
+~/agent-tools/bin/
+├── chrome-snapshot → ../<name>/chrome-snapshot.js
+└── chrome-interact → ../<name>/chrome-interact.js
+```
+
+CLI wrappers require:
+- `~/agent-tools/bin` in PATH
+- Registration in AGENTS.md
+- Shell invocation via bash tool
+
+See the [CLI documentation](https://github.com/nicobailon/mcp-to-pi-tools/tree/v1.7.0#readme) for the legacy format.
+
+---
 
 ## Contributing
 
