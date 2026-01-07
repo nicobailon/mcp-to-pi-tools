@@ -27,6 +27,7 @@ import { loadConfig, mergeWithCli, getConfigPath } from "../lib/config.js";
 import { registerToAll, resolveAllPaths, getSuccessfulPaths } from "../lib/registration.js";
 import { createSymlinks, getDefaultSymlinkDir } from "../lib/symlink.js";
 import { ensurePathConfigured } from "../lib/shell-config.js";
+import { isHttpUrl, isValidServerName, escapeTemplateLiteral, escapeDoubleQuotedString } from "../lib/runner.js";
 import { execSync } from "child_process";
 import { createInterface } from "readline";
 import { homedir } from "os";
@@ -108,6 +109,9 @@ function parseArgs(args, mode) {
     fix: false,
     cleanup: false,
     all: false,
+    httpUrl: null,
+    description: null,
+    allowHttp: false,
   };
 
   if (args.length > 0 && !args[0].startsWith("-")) {
@@ -217,6 +221,18 @@ function parseArgs(args, mode) {
       options.cleanup = true;
     } else if (arg === "--all") {
       options.all = true;
+    } else if (arg === "--http-url") {
+      const val = args[++i];
+      if (val && !val.startsWith("-")) {
+        options.httpUrl = val;
+      }
+    } else if (arg === "--description") {
+      const val = args[++i];
+      if (val && !val.startsWith("-")) {
+        options.description = val;
+      }
+    } else if (arg === "--allow-http") {
+      options.allowHttp = true;
     } else if (!arg.startsWith("-") && !options.package) {
       options.package = arg;
     }
@@ -262,6 +278,12 @@ Python/Runner:
   --pip                Use pip runner (requires: pip install <package>)
   --command <cmd>      Use explicit command (docker, custom paths, etc.)
 
+HTTP Servers:
+  --http-url <url>     Connect to HTTP/HTTPS MCP endpoint
+  --description <text> Description for the extension (required for HTTP)
+  --allow-http         Allow non-localhost HTTP URLs (security opt-in)
+                       Note: localhost and HTTPS are auto-allowed
+
 AI Agent:
   --agent <name>       Force AI agent for grouping (pi, claude, codex)
                        Default: auto-detect (pi -> claude -> codex)
@@ -270,6 +292,7 @@ Examples:
   mcp2ext chrome-devtools-mcp                    # npm package
   mcp2ext mcp-server-fetch --uvx                 # Python via uvx
   mcp2ext --command "uvx mcp-server-time" --name time
+  mcp2ext --http-url http://127.0.0.1:3845/mcp --name figma --description "Figma design tools"
 
 Config: ${getConfigPath(true)}
 
@@ -319,6 +342,12 @@ Python/Runner:
   --pip                Use pip runner (requires: pip install <package>)
   --command <cmd>      Use explicit command (docker, custom paths, etc.)
 
+HTTP Servers:
+  --http-url <url>     Connect to HTTP/HTTPS MCP endpoint
+  --description <text> Description for the tool (required for HTTP)
+  --allow-http         Allow non-localhost HTTP URLs (security opt-in)
+                       Note: localhost and HTTPS are auto-allowed
+
 AI Agent:
   --agent <name>       Force AI agent for code generation (pi, claude, codex)
                        Default: auto-detect (pi -> claude -> codex)
@@ -347,6 +376,7 @@ Examples:
   mcp2cli --command "docker run -i --rm mcp/fetch" fetch
   mcp2cli chrome-devtools-mcp --preset claude --local
   mcp2cli @org/mcp@latest --output ./tools --no-register
+  mcp2cli --http-url http://127.0.0.1:3845/mcp --name figma --description "Figma design tools"
 
 Note: Without --uvx or --pip, tries npm first then auto-falls back to uvx.
 
@@ -713,10 +743,36 @@ async function mainExt(options) {
   }
 
   // Validate required arguments
-  if (!options.package && !options.command) {
-    console.error("Error: Missing required argument: mcp-package");
+  if (!options.package && !options.command && !options.httpUrl) {
+    console.error("Error: Missing required argument: mcp-package or --http-url");
     console.error("Run 'mcp2ext --help' for usage information.");
     process.exit(EXIT_INVALID_ARGS);
+  }
+
+  // HTTP mode validation
+  if (options.httpUrl) {
+    if (!isHttpUrl(options.httpUrl)) {
+      console.error(`Error: Invalid HTTP URL: ${options.httpUrl}`);
+      console.error("URL must start with http:// or https://");
+      process.exit(EXIT_INVALID_ARGS);
+    }
+    if (!options.name) {
+      console.error("Error: --name is required when using --http-url");
+      console.error("HTTP endpoints don't have package names, so you must specify one.");
+      process.exit(EXIT_INVALID_ARGS);
+    }
+    if (!options.description) {
+      console.error("Error: --description is required when using --http-url");
+      console.error("HTTP endpoints don't have registry metadata, so you must provide a description.");
+      process.exit(EXIT_INVALID_ARGS);
+    }
+    if (!isValidServerName(options.name)) {
+      console.error(`Error: Invalid server name: ${options.name}`);
+      console.error("Name must contain only letters, numbers, hyphens, and underscores.");
+      process.exit(EXIT_INVALID_ARGS);
+    }
+    // For HTTP mode, use name as package
+    options.package = options.name;
   }
 
   // Auto-derive package name from --command if not provided
@@ -786,6 +842,9 @@ async function mainExt(options) {
       uvx: options.uvx,
       pip: options.pip,
       command: options.command,
+      httpUrl: options.httpUrl,
+      description: options.description,
+      allowHttp: options.allowHttp,
     });
     if (!quiet) {
       console.log(`      Found ${discovery.tools.length} tools (via ${discovery.runner})`);
@@ -827,6 +886,8 @@ async function mainExt(options) {
       groups,
       tools: discovery.tools,
       description: discovery.description,
+      httpUrl: discovery.httpUrl,
+      allowHttp: discovery.allowHttp,
     });
 
     if (!quiet) {
@@ -909,10 +970,36 @@ async function mainCli(options) {
   }
 
   // Validate required arguments
-  if (!options.package && !options.command) {
-    console.error("Error: Missing required argument: mcp-package");
+  if (!options.package && !options.command && !options.httpUrl) {
+    console.error("Error: Missing required argument: mcp-package or --http-url");
     console.error("Run 'mcp2cli --help' for usage information.");
     process.exit(EXIT_INVALID_ARGS);
+  }
+
+  // HTTP mode validation
+  if (options.httpUrl) {
+    if (!isHttpUrl(options.httpUrl)) {
+      console.error(`Error: Invalid HTTP URL: ${options.httpUrl}`);
+      console.error("URL must start with http:// or https://");
+      process.exit(EXIT_INVALID_ARGS);
+    }
+    if (!options.name) {
+      console.error("Error: --name is required when using --http-url");
+      console.error("HTTP endpoints don't have package names, so you must specify one.");
+      process.exit(EXIT_INVALID_ARGS);
+    }
+    if (!options.description) {
+      console.error("Error: --description is required when using --http-url");
+      console.error("HTTP endpoints don't have registry metadata, so you must provide a description.");
+      process.exit(EXIT_INVALID_ARGS);
+    }
+    if (!isValidServerName(options.name)) {
+      console.error(`Error: Invalid server name: ${options.name}`);
+      console.error("Name must contain only letters, numbers, hyphens, and underscores.");
+      process.exit(EXIT_INVALID_ARGS);
+    }
+    // For HTTP mode, use name as package
+    options.package = options.name;
   }
 
   // Auto-derive package name from --command if not provided
@@ -987,6 +1074,9 @@ async function mainCli(options) {
       uvx: options.uvx,
       pip: options.pip,
       command: options.command,
+      httpUrl: options.httpUrl,
+      description: options.description,
+      allowHttp: options.allowHttp,
     });
     if (!quiet) {
       console.log(`      Found ${discovery.tools.length} tools (via ${discovery.runner})`);
@@ -1027,13 +1117,18 @@ async function mainCli(options) {
         console.log(`      [${i + 1}/${groups.length}] ${group.filename}`);
       }
 
+      // Build httpOptions if in HTTP mode
+      const httpOptions = discovery.httpUrl
+        ? { httpUrl: discovery.httpUrl, allowHttp: discovery.allowHttp }
+        : undefined;
+
       if (agentType) {
         const code = await generateWrapper(
           group,
           discovery.tools,
           discovery.serverName,
           discovery.mcpCommand,
-          { quiet, agentType }
+          { quiet, agentType, httpOptions }
         );
         files[group.filename] = code;
       } else {
@@ -1041,7 +1136,8 @@ async function mainCli(options) {
           group,
           discovery.tools,
           discovery.serverName,
-          discovery.mcpCommand
+          discovery.mcpCommand,
+          httpOptions
         );
       }
     }
@@ -1144,40 +1240,70 @@ async function mainCli(options) {
 
 /**
  * Generate a basic wrapper without Pi (fallback)
+ * @param {object} group - Group object
+ * @param {Array} tools - Full tool definitions
+ * @param {string} serverName - MCP server name
+ * @param {string} mcpCommand - MCP command (STDIO mode)
+ * @param {object} [httpOptions] - HTTP transport options
+ * @param {string} [httpOptions.httpUrl] - HTTP URL for MCP endpoint
+ * @param {boolean} [httpOptions.allowHttp] - Allow non-localhost HTTP
  */
-function generateFallbackWrapper(group, tools, serverName, mcpCommand) {
+function generateFallbackWrapper(group, tools, serverName, mcpCommand, httpOptions) {
   const tool = tools.find((t) => t.name === group.mcp_tools[0]);
   const params = tool?.inputSchema?.properties || {};
   const required = tool?.inputSchema?.required || [];
 
+  // Escape for template literal since paramDocs goes into console.log(`...`)
   const paramDocs = Object.entries(params)
     .map(([name, schema]) => {
       const req = required.includes(name) ? " (required)" : "";
-      return `  --${name}${req}: ${schema.description || schema.type || "value"}`;
+      const desc = escapeTemplateLiteral(schema.description || schema.type || "value");
+      return `  --${name}${req}: ${desc}`;
     })
     .join("\n");
 
-  return `#!/usr/bin/env node
+  const toolName = tool?.name || group.mcp_tools[0];
+  const escapedServerName = escapeDoubleQuotedString(serverName);
+  const escapedToolName = escapeDoubleQuotedString(toolName);
+  const escapedFilename = escapeDoubleQuotedString(group.filename);
+  const escapedDescription = escapeDoubleQuotedString(group.description);
 
-import { execSync } from "child_process";
+  // Determine transport mode
+  const isHttpMode = httpOptions?.httpUrl;
 
-const args = process.argv.slice(2);
+  let constantsSection;
+  let callMcpFunction;
 
-if (args.length === 0 || args[0] === "--help") {
-  console.log("Usage: ${group.filename} [options]");
-  console.log("");
-  console.log("${group.description}");
-  console.log("");
-  console.log("Options:");
-  console.log("  --help: Show this help message");
-${paramDocs ? `  console.log(\`${paramDocs}\`);` : ""}
-  process.exit(0);
-}
+  if (isHttpMode) {
+    // HTTP mode: use HTTP_URL constant, --http-url flag
+    const escapedHttpUrl = escapeDoubleQuotedString(httpOptions.httpUrl);
+    const allowHttpFlag = httpOptions.allowHttp ? " --allow-http" : "";
+    const escapedAllowHttp = escapeTemplateLiteral(allowHttpFlag);
 
-const MCP_CMD = "${mcpCommand}";
-const SERVER = "${serverName}";
+    constantsSection = `const HTTP_URL = "${escapedHttpUrl}";
+const SERVER = "${escapedServerName}";`;
 
-function callMcp(tool, params = {}) {
+    callMcpFunction = `function callMcp(tool, params = {}) {
+  const paramStr = Object.entries(params)
+    .map(([k, v]) => \`\${k}:\${JSON.stringify(v)}\`)
+    .join(" ");
+
+  const cmd = \`npx mcporter call${escapedAllowHttp} --http-url "\${HTTP_URL}" \${SERVER}.\${tool} \${paramStr}\`;
+
+  try {
+    return execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+  } catch (error) {
+    throw new Error(error.stderr || error.message);
+  }
+}`;
+  } else {
+    // STDIO mode: use MCP_CMD constant, --stdio flag (original behavior)
+    const escapedMcpCmd = escapeDoubleQuotedString(mcpCommand);
+
+    constantsSection = `const MCP_CMD = "${escapedMcpCmd}";
+const SERVER = "${escapedServerName}";`;
+
+    callMcpFunction = `function callMcp(tool, params = {}) {
   const paramStr = Object.entries(params)
     .map(([k, v]) => \`\${k}:\${JSON.stringify(v)}\`)
     .join(" ");
@@ -1189,7 +1315,29 @@ function callMcp(tool, params = {}) {
   } catch (error) {
     throw new Error(error.stderr || error.message);
   }
+}`;
+  }
+
+  return `#!/usr/bin/env node
+
+import { execSync } from "child_process";
+
+const args = process.argv.slice(2);
+
+if (args.length === 0 || args[0] === "--help") {
+  console.log("Usage: ${escapedFilename} [options]");
+  console.log("");
+  console.log("${escapedDescription}");
+  console.log("");
+  console.log("Options:");
+  console.log("  --help: Show this help message");
+${paramDocs ? `  console.log(\`${paramDocs}\`);` : ""}
+  process.exit(0);
 }
+
+${constantsSection}
+
+${callMcpFunction}
 
 // Parse arguments
 const params = {};
@@ -1207,7 +1355,7 @@ for (let i = 0; i < args.length; i++) {
 }
 
 try {
-  const result = callMcp("${tool?.name || group.mcp_tools[0]}", params);
+  const result = callMcp("${escapedToolName}", params);
   console.log(result);
 } catch (error) {
   console.error("Error:", error.message);

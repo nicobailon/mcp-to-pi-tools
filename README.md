@@ -107,6 +107,9 @@ mcp2ext refresh chrome-devtools
 --force, -f          Overwrite existing extension
 --quiet, -q          Suppress progress output
 --agent <name>       Force AI agent for grouping (pi, claude, codex)
+--http-url <url>     Connect to HTTP/HTTPS MCP endpoint (requires --name, --description)
+--description <text> Description for extension (required for HTTP servers)
+--allow-http         Allow non-localhost HTTP URLs
 ```
 
 ### Python/Runner Options
@@ -116,6 +119,25 @@ mcp2ext refresh chrome-devtools
 --pip                Use pip runner (requires: pip install <package>)
 --command <cmd>      Use explicit command (docker, custom paths, etc.)
 ```
+
+### HTTP Servers
+
+For MCP servers that expose HTTP endpoints (like Figma MCP desktop server):
+
+```bash
+# Local HTTP endpoint (localhost auto-allowed)
+mcp2ext --http-url http://127.0.0.1:3845/mcp --name figma --description "Figma design tools"
+
+# HTTPS endpoints
+mcp2ext --http-url https://api.example.com/mcp --name api --description "API tools"
+
+# Non-localhost HTTP (requires explicit flag)
+mcp2ext --http-url http://192.168.1.100:8080/mcp --name internal --description "Internal tools" --allow-http
+```
+
+**Note:** `--name` and `--description` are required for HTTP (no package registry to fetch metadata).
+
+**Security:** Localhost HTTP is auto-allowed. Non-localhost requires HTTPS or `--allow-http`.
 
 ## Migrating from CLI Format
 
@@ -173,7 +195,17 @@ For multi-tool groups:
 ## Legacy: CLI Wrapper Format
 
 The original `mcp2cli` command generates shell-invokable CLI scripts instead of native extensions.
-This format is still supported but deprecated in favor of `mcp2ext`.
+
+**Why mcp2ext is preferred for Pi:**
+- Auto-discovered (no AGENTS.md registration)
+- No symlinks or PATH configuration
+- Direct tool integration (no bash layer)
+- TypeBox schemas for type safety
+
+**When to use mcp2cli instead:**
+- Using other agents (Claude CLI, Codex, Gemini) that don't have Pi's extension system
+- Need shell-accessible commands for manual use
+- Working with systems that invoke tools via bash
 
 ### CLI Usage
 
